@@ -1,0 +1,170 @@
+[project]
+name = "cxo-ai-companion"
+version = "1.0.0"
+description = "CXO AI Companion — Intelligent Meeting Assistant for Enterprise Leaders"
+requires-python = ">=3.11"
+license = {text = "Proprietary"}
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "httpx>=0.28.0",
+    "msal>=1.31.0",
+    "azure-communication-callautomation>=1.3.0",
+    "azure-ai-inference>=1.0.0b7",
+    "apscheduler>=3.10.0",
+    "rapidfuzz>=3.10.0",
+    "tenacity>=9.0.0",
+    "python-dotenv>=1.0.0",
+    "python-json-logger>=3.2.0",
+    "pgvector>=0.3",
+    "openai>=1.0",
+    "PyPDF2>=3.0",
+    "python-docx>=1.0",
+    "python-pptx>=0.6",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "PyJWT[crypto]>=2.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "pytest-xdist>=3.5",
+    "mypy>=1.13",
+    "ruff>=0.8.0",
+    "pyright>=1.1",
+    "pre-commit>=4.0",
+    "factory-boy>=3.3",
+    "aiosqlite>=0.20.0",
+]
+redis = [
+    "redis>=5.2.0",
+    "celery>=5.4.0",
+]
+observability = [
+    "opentelemetry-api>=1.28",
+    "opentelemetry-sdk>=1.28",
+    "opentelemetry-instrumentation-fastapi>=0.49",
+    "opentelemetry-instrumentation-httpx>=0.49",
+    "opentelemetry-instrumentation-sqlalchemy>=0.49",
+    "opentelemetry-exporter-otlp>=1.28",
+    "prometheus-client>=0.21",
+]
+vector = [
+    "pgvector>=0.3",
+]
+all = [
+    "cxo-ai-companion[redis,observability,vector]",
+]
+
+[build-system]
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ─── Testing ────────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "unit: Fast unit tests (no external dependencies)",
+    "integration: Integration tests (require database/services)",
+    "slow: Slow-running tests (transcription, AI calls)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+source = ["src/cxo_ai_companion"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+]
+
+# ─── Type Checking ──────────────────────────────────────────────────────────────
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "azure.*",
+    "msal.*",
+    "apscheduler.*",
+    "pgvector.*",
+    "PyPDF2.*",
+    "docx.*",
+    "pptx.*",
+    "bs4.*",
+    "lxml.*",
+    "openai.*",
+]
+ignore_missing_imports = true
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+
+# ─── Linting & Formatting ──────────────────────────────────────────────────────
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "A",    # flake8-builtins
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "RUF",  # ruff-specific rules
+    "S",    # flake8-bandit (security)
+    "DTZ",  # flake8-datetimez
+    "PT",   # flake8-pytest-style
+]
+ignore = [
+    "S101",  # assert usage allowed in tests
+    "B008",  # function calls in default arguments (FastAPI Depends)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S106"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["cxo_ai_companion"]

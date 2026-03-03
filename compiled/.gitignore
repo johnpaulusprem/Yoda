@@ -1,0 +1,64 @@
+# ─── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.whl
+
+# ─── Virtual Environments ──────────────────────────────────────────────────
+.venv/
+venv/
+ENV/
+
+# ─── Testing & Coverage ───────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# ─── Type Checking & Linting ──────────────────────────────────────────────
+.mypy_cache/
+.pyright/
+.ruff_cache/
+
+# ─── IDE & Editors ─────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ─── Environment & Secrets ────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+
+# ─── Docker ────────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── Database ──────────────────────────────────────────────────────────────
+*.db
+*.sqlite3
+
+# ─── Data & Logs ──────────────────────────────────────────────────────────
+data/
+logs/
+*.log
+
+# ─── OS Files ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
