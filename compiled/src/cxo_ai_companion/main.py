@@ -3,19 +3,21 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
-from fastapi import FastAPI, WebSocket
+from uuid import UUID as UUID_type
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from cxo_ai_companion.config import Settings
 from cxo_ai_companion.dependencies import init_db, get_settings, _async_session_factory
 from cxo_ai_companion.observability.logging import configure_logging
-from cxo_ai_companion.api.rest.middleware import ErrorHandlerMiddleware, RequestLoggingMiddleware, CorrelationIdMiddleware
+from cxo_ai_companion.api.rest.middleware import ErrorHandlerMiddleware, RequestLoggingMiddleware, CorrelationIdMiddleware, SecurityHeadersMiddleware, RateLimiterMiddleware
 from cxo_ai_companion.api.rest.routes import (
     health_router, meetings_router, action_items_router, dashboard_router,
     chat_router, documents_router, insights_router, webhooks_router, acs_callbacks_router,
     notifications_router, search_router, projects_router,
 )
 from cxo_ai_companion.api.websocket.transcription import handle_transcription_ws
+from cxo_ai_companion.security.jwt_validator import JWTValidator
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,8 @@ def create_app() -> FastAPI:
     app.add_middleware(ErrorHandlerMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RateLimiterMiddleware, rpm=settings.RATE_LIMIT_RPM, burst=settings.RATE_LIMIT_BURST)
     app.add_middleware(CORSMiddleware, allow_origins=settings.CORS_ALLOWED_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
     # Routes
@@ -62,6 +66,31 @@ def create_app() -> FastAPI:
 
     @app.websocket("/ws/transcription/{meeting_id}")
     async def transcription_ws(websocket: WebSocket, meeting_id: str):
+        # Validate meeting_id is UUID
+        try:
+            UUID_type(meeting_id)
+        except ValueError:
+            await websocket.close(code=1008, reason="Invalid meeting_id")
+            return
+
+        # Authenticate via ?token= query param
+        token = websocket.query_params.get("token")
+        if not token:
+            await websocket.close(code=1008, reason="Missing token")
+            return
+
+        try:
+            validator = JWTValidator(
+                tenant_id=settings.AZURE_TENANT_ID,
+                client_id=settings.AZURE_CLIENT_ID,
+                issuer=settings.AZURE_ISSUER or None,
+                jwks_uri=settings.AZURE_JWKS_URI or None,
+            )
+            await validator.validate_token(token)
+        except Exception:
+            await websocket.close(code=1008, reason="Invalid token")
+            return
+
         await handle_transcription_ws(websocket, meeting_id, _async_session_factory)
 
     return app

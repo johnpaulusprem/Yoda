@@ -71,7 +71,7 @@ class JWTValidator:
             jwks_uri
             or f"https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys"
         )
-        self._jwk_client = PyJWKClient(self._jwks_uri, cache_keys=True)
+        self._jwk_client = PyJWKClient(self._jwks_uri, cache_keys=True, timeout=10)
 
     async def validate_token(self, token: str) -> TokenClaims:
         """Validate a Bearer token and return the extracted claims.
@@ -103,6 +103,8 @@ class JWTValidator:
 
         # Extract claims — handle both v1 and v2 token formats.
         user_id = payload.get("oid") or payload.get("sub", "")
+        if not user_id:
+            raise jwt.InvalidTokenError("Token missing required 'oid' or 'sub' claim")
         tenant_id = payload.get("tid", self._tenant_id)
         name = payload.get("name", "")
         email = (

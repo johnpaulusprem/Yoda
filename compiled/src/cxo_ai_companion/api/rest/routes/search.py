@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,9 +13,13 @@ from cxo_ai_companion.models.meeting import Meeting
 from cxo_ai_companion.models.action_item import ActionItem
 from cxo_ai_companion.models.document import Document
 from cxo_ai_companion.schemas.search import SearchResponse, SearchResultItem
+from cxo_ai_companion.security.auth_dependency import get_current_user
+from cxo_ai_companion.security.context import SecurityContext
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+_ALLOWED_SEARCH_TYPES = {"meetings", "documents", "actions"}
 
 
 @router.get("", response_model=SearchResponse)
@@ -24,9 +28,13 @@ async def global_search(
     types: str = Query("meetings,documents,actions", description="Comma-separated types to search"),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Search across meetings, documents, and action items."""
     search_types = [t.strip() for t in types.split(",")]
+    invalid = set(search_types) - _ALLOWED_SEARCH_TYPES
+    if invalid:
+        raise HTTPException(status_code=422, detail=f"Invalid search types: {invalid}")
     pattern = f"%{q}%"
     results: list[SearchResultItem] = []
 

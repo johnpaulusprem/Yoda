@@ -9,6 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cxo_ai_companion.dependencies import get_db
+from cxo_ai_companion.security.auth_dependency import get_current_user
+from cxo_ai_companion.security.context import SecurityContext
 from cxo_ai_companion.models.document import Document
 from cxo_ai_companion.schemas.document import DocumentListResponse, DocumentResponse
 
@@ -20,6 +22,7 @@ async def list_documents(
     meeting_id: UUID | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ) -> DocumentListResponse:
     """List documents, optionally filtered by meeting ID."""
     query = select(Document)
@@ -37,6 +40,7 @@ async def list_documents(
 async def search_documents(
     q: str = Query(..., min_length=1, description="Semantic search query"),
     k: int = Query(5, ge=1, le=50),
+    ctx: SecurityContext = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Semantic search across all indexed documents via the RAG retriever."""
     from cxo_ai_companion.dependencies import get_retriever
@@ -63,6 +67,7 @@ async def search_documents(
 async def get_document(
     document_id: UUID,
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ) -> DocumentResponse:
     """Retrieve a single document by ID."""
     result = await db.execute(
@@ -78,10 +83,10 @@ async def get_document(
 async def upload_document(
     file: UploadFile,
     title: str = Query(...),
-    uploaded_by: str = Query(...),
     meeting_id: UUID | None = Query(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ) -> DocumentResponse:
     """Upload a document and trigger async RAG ingestion."""
     content = await file.read()
@@ -91,7 +96,7 @@ async def upload_document(
         source="upload",
         content_type=file.content_type or "",
         file_size_bytes=len(content),
-        uploaded_by=uploaded_by,
+        uploaded_by=ctx.user_id,
         meeting_id=meeting_id,
         status="pending",
     )
@@ -110,6 +115,7 @@ async def reprocess_document(
     document_id: UUID,
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ) -> dict[str, str]:
     """Re-index an existing document through the ingestion pipeline."""
     result = await db.execute(

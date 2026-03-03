@@ -4,6 +4,9 @@ import logging
 from fastapi import APIRouter, Request, Response
 from starlette.responses import PlainTextResponse
 
+from cxo_ai_companion.config import Settings
+from cxo_ai_companion.dependencies import get_settings
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -13,9 +16,15 @@ async def graph_webhook(request: Request):
     validation_token = request.query_params.get("validationToken")
     if validation_token:
         return PlainTextResponse(content=validation_token, media_type="text/plain")
+    settings = get_settings()
     body = await request.json()
     notifications = body.get("value", [])
     for notification in notifications:
+        # Validate clientState matches our secret
+        client_state = notification.get("clientState", "")
+        if settings.GRAPH_WEBHOOK_SECRET and client_state != settings.GRAPH_WEBHOOK_SECRET:
+            logger.warning("Webhook clientState mismatch, skipping notification")
+            continue
         resource = notification.get("resource", "")
         change_type = notification.get("changeType", "")
         logger.info("Graph webhook: %s on %s", change_type, resource)

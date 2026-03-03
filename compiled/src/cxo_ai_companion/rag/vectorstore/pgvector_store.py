@@ -41,6 +41,13 @@ class PGVectorConfig:
     ef_construction: int = 64
     m: int = 16
 
+    def __post_init__(self) -> None:
+        import re
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", self.table_name):
+            raise ValueError(
+                f"Invalid table_name '{self.table_name}': must match ^[a-zA-Z_][a-zA-Z0-9_]*$"
+            )
+
 
 class PGVectorStore(BaseVectorStore):
     """Vector store backed by PostgreSQL with the pgvector extension.

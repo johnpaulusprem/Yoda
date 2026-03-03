@@ -10,6 +10,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cxo_ai_companion.dependencies import get_db
+from cxo_ai_companion.security.auth_dependency import get_current_user
+from cxo_ai_companion.security.context import SecurityContext
 from cxo_ai_companion.data_access.repositories import MeetingRepository, ActionItemRepository
 from cxo_ai_companion.models.document import Document
 from cxo_ai_companion.models.summary import MeetingSummary
@@ -20,7 +22,7 @@ router = APIRouter()
 
 
 @router.get("/stats")
-async def get_dashboard_stats(user_id: str = Query(...), db: AsyncSession = Depends(get_db)):
+async def get_dashboard_stats(db: AsyncSession = Depends(get_db), ctx: SecurityContext = Depends(get_current_user)):
     """Return executive dashboard KPIs: meetings today, pending/overdue actions, completion rate, and docs to review."""
     m_repo = MeetingRepository(db)
     a_repo = ActionItemRepository(db)
@@ -47,7 +49,7 @@ async def get_dashboard_stats(user_id: str = Query(...), db: AsyncSession = Depe
 
 
 @router.get("/attention-items")
-async def get_attention_items(user_id: str = Query(...), db: AsyncSession = Depends(get_db)):
+async def get_attention_items(db: AsyncSession = Depends(get_db), ctx: SecurityContext = Depends(get_current_user)):
     """Return items needing attention: overdue and due-soon action items."""
     a_repo = ActionItemRepository(db)
     overdue = await a_repo.get_overdue()
@@ -59,9 +61,9 @@ async def get_attention_items(user_id: str = Query(...), db: AsyncSession = Depe
 
 @router.get("/activity-feed")
 async def get_activity_feed(
-    user_id: str = Query(...),
     limit: int = Query(20, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Extended activity feed with summaries, action items, and document uploads."""
     feed: list[dict] = []

@@ -27,6 +27,8 @@ from cxo_ai_companion.schemas.pre_meeting_brief import (
     RelatedDocumentResponse,
 )
 from cxo_ai_companion.schemas.summary import SummaryUpdateRequest, SummaryShareRequest, SummaryShareResponse
+from cxo_ai_companion.security.auth_dependency import get_current_user
+from cxo_ai_companion.security.context import SecurityContext
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -38,6 +40,7 @@ async def list_meetings(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """List meetings with optional status filter and pagination."""
     repo = MeetingRepository(db)
@@ -55,6 +58,7 @@ async def list_meetings(
 async def get_calendar_view(
     range: str = Query("week", description="today|week|month"),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Get meetings grouped by date for calendar view with computed tags.
 
@@ -137,7 +141,7 @@ async def get_calendar_view(
 
 
 @router.get("/{meeting_id}", response_model=MeetingDetailResponse)
-async def get_meeting(meeting_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_meeting(meeting_id: UUID, db: AsyncSession = Depends(get_db), ctx: SecurityContext = Depends(get_current_user)):
     """Retrieve a single meeting with all related details."""
     repo = MeetingRepository(db)
     meeting = await repo.get_with_details(meeting_id)
@@ -147,7 +151,7 @@ async def get_meeting(meeting_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{meeting_id}/transcript")
-async def get_transcript(meeting_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_transcript(meeting_id: UUID, db: AsyncSession = Depends(get_db), ctx: SecurityContext = Depends(get_current_user)):
     """Retrieve transcript segments for a meeting, ordered by sequence number."""
     repo = MeetingRepository(db)
     meeting = await repo.get_by_id(meeting_id)
@@ -172,14 +176,14 @@ async def get_transcript(meeting_id: UUID, db: AsyncSession = Depends(get_db)):
 @router.get("/{meeting_id}/brief", response_model=PreMeetingBriefResponse)
 async def get_pre_meeting_brief(
     meeting_id: UUID,
-    user_id: str = Query(...),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Generate a pre-meeting brief for an executive."""
     from cxo_ai_companion.services.pre_meeting_service import PreMeetingService
 
     service = PreMeetingService(db)
-    brief = await service.generate_brief(meeting_id, user_id)
+    brief = await service.generate_brief(meeting_id, ctx.user_id)
 
     return PreMeetingBriefResponse(
         meeting_id=brief.meeting_id,
@@ -229,6 +233,7 @@ async def update_summary(
     meeting_id: UUID,
     body: SummaryUpdateRequest,
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Apply partial updates to a meeting summary (edit before sharing)."""
     repo = SummaryRepository(db)
@@ -249,6 +254,7 @@ async def share_summary(
     body: SummaryShareRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Share a meeting summary via specified channels."""
     repo = SummaryRepository(db)
@@ -284,6 +290,7 @@ async def share_summary(
 async def get_conflicts(
     meeting_id: UUID,
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Detect decision conflicts for a meeting against past meetings."""
     from cxo_ai_companion.services.conflict_detection_service import ConflictDetectionService
@@ -295,7 +302,7 @@ async def get_conflicts(
 
 @router.post("/{meeting_id}/join")
 async def join_meeting(
-    meeting_id: UUID, request: Request, db: AsyncSession = Depends(get_db),
+    meeting_id: UUID, request: Request, db: AsyncSession = Depends(get_db), ctx: SecurityContext = Depends(get_current_user),
 ):
     """Join a scheduled meeting via ACS Call Automation.
 
@@ -321,7 +328,7 @@ async def join_meeting(
 
 @router.post("/{meeting_id}/leave")
 async def leave_meeting(
-    meeting_id: UUID, request: Request, db: AsyncSession = Depends(get_db),
+    meeting_id: UUID, request: Request, db: AsyncSession = Depends(get_db), ctx: SecurityContext = Depends(get_current_user),
 ):
     """Leave an in-progress meeting via ACS Call Automation."""
     repo = MeetingRepository(db)

@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cxo_ai_companion.dependencies import get_db
+from cxo_ai_companion.security.auth_dependency import get_current_user
+from cxo_ai_companion.security.context import SecurityContext
 from cxo_ai_companion.data_access.repositories.project_repository import ProjectRepository
 from cxo_ai_companion.data_access.repositories import MeetingRepository
 from cxo_ai_companion.models.project import Project, project_meetings_table
@@ -30,6 +32,7 @@ async def list_projects(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """List projects with optional filters."""
     repo = ProjectRepository(db)
@@ -47,7 +50,7 @@ async def list_projects(
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
-async def get_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_project(project_id: UUID, db: AsyncSession = Depends(get_db), ctx: SecurityContext = Depends(get_current_user)):
     """Get a project with its linked meetings."""
     repo = ProjectRepository(db)
     project = await repo.get_with_meetings(project_id)
@@ -60,6 +63,7 @@ async def get_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
 async def create_project(
     body: ProjectCreateRequest,
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Create a new project."""
     repo = ProjectRepository(db)
@@ -79,6 +83,7 @@ async def update_project(
     project_id: UUID,
     body: ProjectUpdateRequest,
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Partially update a project."""
     repo = ProjectRepository(db)
@@ -98,6 +103,7 @@ async def link_meeting_to_project(
     project_id: UUID,
     meeting_id: UUID,
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Link a meeting to a project."""
     p_repo = ProjectRepository(db)
@@ -124,6 +130,7 @@ async def unlink_meeting_from_project(
     project_id: UUID,
     meeting_id: UUID,
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Unlink a meeting from a project."""
     await db.execute(

@@ -4,6 +4,8 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from cxo_ai_companion.security.auth_dependency import get_current_user
+from cxo_ai_companion.security.context import SecurityContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,14 +21,14 @@ router = APIRouter()
 
 @router.post("/sessions")
 async def create_session(
-    user_id: str,
     title: str = "New Chat",
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ) -> ChatSessionResponse:
     """Create a new chat session for a user."""
     from cxo_ai_companion.models.chat import ChatSession
 
-    session = ChatSession(user_id=user_id, title=title)
+    session = ChatSession(user_id=ctx.user_id, title=title)
     db.add(session)
     await db.flush()
     await db.refresh(session)
@@ -35,15 +37,15 @@ async def create_session(
 
 @router.get("/sessions")
 async def list_sessions(
-    user_id: str,
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ) -> dict:
     """List all chat sessions for a user, ordered by most recent activity."""
     from cxo_ai_companion.models.chat import ChatSession
 
     result = await db.execute(
         select(ChatSession)
-        .where(ChatSession.user_id == user_id)
+        .where(ChatSession.user_id == ctx.user_id)
         .order_by(ChatSession.last_message_at.desc())
     )
     sessions = result.scalars().all()
@@ -55,6 +57,7 @@ async def send_message(
     session_id: UUID,
     body: ChatMessageRequest,
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ) -> ChatMessageResponse:
     """Send a user message and receive an AI-generated response via the RAG pipeline.
 
@@ -110,6 +113,7 @@ async def send_message(
 async def get_messages(
     session_id: UUID,
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ) -> dict:
     """Retrieve all messages in a chat session, ordered chronologically."""
     from cxo_ai_companion.models.chat import ChatMessage

@@ -11,15 +11,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from cxo_ai_companion.dependencies import get_db
 from cxo_ai_companion.models import Meeting, ActionItem, MeetingInsight, MeetingSummary, MeetingParticipant, WeeklyDigest
+from cxo_ai_companion.security.auth_dependency import get_current_user
+from cxo_ai_companion.security.context import SecurityContext
 
 router = APIRouter()
 
 
 @router.get("/meeting-time")
 async def meeting_time_analysis(
-    user_id: str = Query(...),
-    days: int = Query(30),
+    days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Return meeting time statistics: total count and weekly average over a period."""
     result = await db.execute(
@@ -35,9 +37,9 @@ async def meeting_time_analysis(
 
 @router.get("/action-completion")
 async def action_completion(
-    user_id: str = Query(...),
-    days: int = Query(30),
+    days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Return action item completion rate: total, completed, and percentage."""
     total_r = await db.execute(select(func.count()).select_from(ActionItem))
@@ -52,9 +54,9 @@ async def action_completion(
 
 @router.get("/collaboration")
 async def collaboration_patterns(
-    user_id: str = Query(...),
-    days: int = Query(30),
+    days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Analyze collaboration patterns: top collaborators and stale 1:1s."""
     cutoff = datetime.now(UTC) - timedelta(days=days)
@@ -109,15 +111,15 @@ async def collaboration_patterns(
         "top_collaborators": top_collaborators,
         "stale_contacts": stale_contacts[:10],
         "period_days": days,
-        "user_id": user_id,
+        "user_id": ctx.user_id,
     }
 
 
 @router.get("/patterns")
 async def topic_patterns(
-    user_id: str = Query(...),
-    days: int = Query(30),
+    days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Detect recurring topics and potential decision reversals."""
     cutoff = datetime.now(UTC) - timedelta(days=days)
@@ -175,13 +177,13 @@ async def topic_patterns(
 
 @router.get("/weekly-digest")
 async def weekly_digest(
-    user_id: str = Query(...),
     db: AsyncSession = Depends(get_db),
+    ctx: SecurityContext = Depends(get_current_user),
 ):
     """Retrieve the most recent weekly digest for a user."""
     result = await db.execute(
         select(WeeklyDigest)
-        .where(WeeklyDigest.user_id == user_id)
+        .where(WeeklyDigest.user_id == ctx.user_id)
         .order_by(WeeklyDigest.week_end.desc())
         .limit(1)
     )

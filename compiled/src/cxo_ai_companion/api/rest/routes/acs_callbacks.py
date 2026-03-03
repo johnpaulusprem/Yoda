@@ -8,6 +8,10 @@ router = APIRouter()
 
 @router.post("/acs/events")
 async def acs_callback(request: Request):
+    # Read raw body for audit logging
+    raw_body = await request.body()
+    logger.debug("ACS callback raw body length: %d bytes", len(raw_body))
+    # Note: ACS SDK handles signature validation internally via CallAutomationEventParser
     events = await request.json()
     if not isinstance(events, list): events = [events]
     for event in events:

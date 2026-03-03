@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     LOG_JSON: bool = True
     BASE_URL: str = "http://localhost:8000"
 
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/cxo_companion"
+    DATABASE_URL: str = ""
     DATABASE_POOL_SIZE: int = 20
     DATABASE_MAX_OVERFLOW: int = 10
 
@@ -56,7 +56,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_RPM: int = 100
     RATE_LIMIT_BURST: int = 20
 
-    CORS_ALLOWED_ORIGINS: list[str] = ["*"]
+    CORS_ALLOWED_ORIGINS: list[str] = []
+    REQUIRE_AUTH: bool = True
 
     OTEL_EXPORTER_ENDPOINT: str = ""
     OTEL_SERVICE_NAME: str = "cxo-ai-companion"

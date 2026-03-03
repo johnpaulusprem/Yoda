@@ -29,6 +29,7 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
     "PyJWT[crypto]>=2.8.0",
+    "python-multipart>=0.0.12",
 ]
 
 [project.optional-dependencies]
