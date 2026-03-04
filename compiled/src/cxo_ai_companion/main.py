@@ -8,7 +8,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from cxo_ai_companion.config import Settings
-from cxo_ai_companion.dependencies import init_db, get_settings, _async_session_factory
+from cxo_ai_companion.dependencies import init_db, init_cache, get_settings, get_cache, _async_session_factory
 from cxo_ai_companion.observability.logging import configure_logging
 from cxo_ai_companion.api.rest.middleware import ErrorHandlerMiddleware, RequestLoggingMiddleware, CorrelationIdMiddleware, SecurityHeadersMiddleware, RateLimiterMiddleware
 from cxo_ai_companion.api.rest.routes import (
@@ -28,11 +28,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Starting %s v%s", settings.APP_NAME, settings.APP_VERSION)
     init_db(settings)
     logger.info("Database engine initialized")
+    await init_cache(settings)
+    logger.info("Cache initialized")
     # Service wiring happens here in production:
     # app.state.acs_service = ACSCallService(...)
     # app.state.calendar_watcher = CalendarWatcher(...)
     # app.state.nudge_scheduler = NudgeScheduler(...)
     yield
+    try:
+        cache = get_cache()
+        await cache.close()
+    except Exception:
+        pass
     logger.info("Shutting down %s", settings.APP_NAME)
 
 def create_app() -> FastAPI:

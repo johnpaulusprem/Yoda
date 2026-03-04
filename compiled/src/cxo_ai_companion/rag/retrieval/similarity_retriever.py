@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from cxo_ai_companion.rag.vectorstore.base_vectorstore import (
     BaseVectorStore,
     VectorSearchResult,
 )
+from cxo_ai_companion.utilities.caching.cache import CacheInterface
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +56,12 @@ class SimilarityRetriever(BaseRetriever):
         embedder: BaseEmbedder,
         vector_store: BaseVectorStore,
         config: SimilarityRetrieverConfig | None = None,
+        cache: CacheInterface | None = None,
     ) -> None:
         self._embedder = embedder
         self._vector_store = vector_store
         self._config = config or SimilarityRetrieverConfig()
+        self._cache = cache
 
     async def retrieve(
         self,
@@ -86,7 +90,24 @@ class SimilarityRetriever(BaseRetriever):
             self._config.score_threshold,
         )
 
-        query_vector: list[float] = await self._embedder.embed(query)
+        query_vector: list[float] | None = None
+        emb_cache_key = f"emb:{hashlib.sha256(query.encode()).hexdigest()}"
+        if self._cache is not None:
+            try:
+                cached_vector = await self._cache.get(emb_cache_key)
+                if cached_vector is not None:
+                    query_vector = cached_vector
+                    logger.debug("Embedding cache hit for query=%r", query[:40])
+            except Exception:
+                logger.debug("Embedding cache get failed, computing fresh embedding")
+
+        if query_vector is None:
+            query_vector = await self._embedder.embed(query)
+            if self._cache is not None:
+                try:
+                    await self._cache.set(emb_cache_key, query_vector, ttl_seconds=86400)
+                except Exception:
+                    logger.debug("Embedding cache set failed")
 
         search_results: list[VectorSearchResult] = await self._vector_store.search(
             query_vector=query_vector,

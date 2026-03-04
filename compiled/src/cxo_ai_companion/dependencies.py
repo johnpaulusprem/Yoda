@@ -7,15 +7,22 @@ function creates its singleton on first call using application settings.
 from __future__ import annotations
 
 import functools
+import logging
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from cxo_ai_companion.config import Settings
+from cxo_ai_companion.utilities.caching.cache import CacheInterface
+
+logger = logging.getLogger(__name__)
 
 _engine = None
 _async_session_factory: async_sessionmaker[AsyncSession] | None = None
+
+# Cache singleton
+_cache: CacheInterface | None = None
 
 # RAG + DSPy singletons (lazy-initialised via get_* helpers)
 _embedder: Any = None
@@ -75,6 +82,41 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     if _async_session_factory is None:
         raise RuntimeError("Database not initialized. Call init_db() first.")
     return _async_session_factory
+
+
+async def init_cache(settings: Settings) -> None:
+    """Initialize Redis cache at startup. Falls back to MemoryCache if Redis unavailable."""
+    global _cache
+    try:
+        from cxo_ai_companion.utilities.caching import RedisCache, CacheConfig
+
+        _cache = RedisCache(
+            config=CacheConfig(
+                default_ttl_seconds=settings.REDIS_CACHE_DEFAULT_TTL,
+                key_prefix=settings.REDIS_CACHE_KEY_PREFIX,
+            ),
+            redis_url=settings.REDIS_URL,
+        )
+        await _cache._client.ping()
+        logger.info("Redis cache initialized at %s", settings.REDIS_URL)
+    except Exception as exc:
+        logger.warning("Redis unavailable (%s), falling back to MemoryCache", exc)
+        from cxo_ai_companion.utilities.caching import MemoryCache, CacheConfig
+
+        _cache = MemoryCache(
+            config=CacheConfig(
+                default_ttl_seconds=settings.REDIS_CACHE_DEFAULT_TTL,
+                key_prefix=settings.REDIS_CACHE_KEY_PREFIX,
+                max_size=1000,
+            )
+        )
+
+
+def get_cache() -> CacheInterface:
+    """Return the cache singleton."""
+    if _cache is None:
+        raise RuntimeError("Cache not initialized. Call init_cache() first.")
+    return _cache
 
 
 def get_embedder() -> Any:
@@ -145,6 +187,7 @@ def get_retriever() -> Any:
         _retriever = SimilarityRetriever(
             embedder=get_embedder(),
             vector_store=get_vector_store(),
+            cache=_cache,
         )
     return _retriever
 
@@ -208,7 +251,7 @@ def get_llm_adapter() -> Any:
             cache_ttl_seconds=settings.DSPY_CACHE_TTL,
         )
         if settings.DSPY_CACHE_ENABLED:
-            _llm_adapter = CachedLLMAdapter(connector, adapter_config)
+            _llm_adapter = CachedLLMAdapter(connector, adapter_config, external_cache=_cache)
         else:
             _llm_adapter = LLMAdapter(connector, adapter_config)
     return _llm_adapter

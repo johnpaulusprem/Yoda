@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     DATABASE_MAX_OVERFLOW: int = 10
 
     REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_CACHE_DEFAULT_TTL: int = 300
+    REDIS_CACHE_KEY_PREFIX: str = "cxo"
+    REDIS_CACHE_BRIEF_TTL: int = 7200
+    REDIS_CACHE_GRAPH_TTL: int = 300
+    REDIS_CACHE_EMBEDDING_TTL: int = 86400
+    REDIS_CACHE_LLM_TTL: int = 3600
+    REDIS_CACHE_DASHBOARD_TTL: int = 120
 
     AZURE_TENANT_ID: str = ""
     AZURE_CLIENT_ID: str = ""

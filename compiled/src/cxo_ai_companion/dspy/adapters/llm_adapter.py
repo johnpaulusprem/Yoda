@@ -18,6 +18,7 @@ from cxo_ai_companion.data_access.connectors.ai_foundry_connector import (
 )
 from cxo_ai_companion.exceptions.dspy import ProgramExecutionError
 from cxo_ai_companion.security.context import SecurityContext
+from cxo_ai_companion.utilities.caching.cache import CacheInterface
 
 logger = logging.getLogger(__name__)
 
@@ -243,10 +244,12 @@ class CachedLLMAdapter(LLMAdapter):
         self,
         connector: AIFoundryConnector,
         config: AdapterConfig | None = None,
+        external_cache: CacheInterface | None = None,
     ) -> None:
         effective_config = config or AdapterConfig(cache_enabled=True)
         super().__init__(connector, effective_config)
         self._cache: dict[str, _CacheEntry] = {}
+        self._external_cache = external_cache
         self._cache_hits: int = 0
         self._cache_misses: int = 0
 
@@ -267,12 +270,30 @@ class CachedLLMAdapter(LLMAdapter):
 
         cache_key = self._make_cache_key(prompt, model, temperature)
 
-        # Check cache
+        # Try external cache (Redis) first
+        if self._external_cache is not None:
+            try:
+                cached_data = await self._external_cache.get(f"llm:{cache_key}")
+                if cached_data is not None:
+                    self._cache_hits += 1
+                    logger.debug("External cache hit for key=%s", cache_key[:12])
+                    return AdapterResponse(
+                        text=cached_data["text"],
+                        input_tokens=cached_data["input_tokens"],
+                        output_tokens=cached_data["output_tokens"],
+                        model=cached_data["model"],
+                        latency_ms=0.0,
+                        cached=True,
+                        metadata={**cached_data.get("metadata", {}), "cache_key": cache_key[:12]},
+                    )
+            except Exception:
+                logger.debug("External cache get failed, falling back to in-memory")
+
+        # Fall back to in-memory cache
         entry = self._cache.get(cache_key)
         if entry is not None and not entry.is_expired:
             self._cache_hits += 1
             logger.debug("Cache hit for key=%s", cache_key[:12])
-            # Return a copy with cached=True
             cached_response = entry.response
             return AdapterResponse(
                 text=cached_response.text,
@@ -292,12 +313,29 @@ class CachedLLMAdapter(LLMAdapter):
         self._cache_misses += 1
         response = await super().call(prompt, security_context, **kwargs)
 
-        # Store in cache
+        # Store in in-memory cache
         self._cache[cache_key] = _CacheEntry(
             response=response,
             created_at=time.monotonic(),
             ttl_seconds=self._config.cache_ttl_seconds,
         )
+
+        # Store in external cache (Redis)
+        if self._external_cache is not None:
+            try:
+                await self._external_cache.set(
+                    f"llm:{cache_key}",
+                    {
+                        "text": response.text,
+                        "input_tokens": response.input_tokens,
+                        "output_tokens": response.output_tokens,
+                        "model": response.model,
+                        "metadata": response.metadata,
+                    },
+                    ttl_seconds=self._config.cache_ttl_seconds,
+                )
+            except Exception:
+                logger.debug("External cache set failed, continuing without caching")
 
         return response
 

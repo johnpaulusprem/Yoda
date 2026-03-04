@@ -23,6 +23,7 @@ from cxo_ai_companion.models.meeting import Meeting, MeetingParticipant
 from cxo_ai_companion.models.summary import MeetingSummary
 from cxo_ai_companion.observability import get_logger, trace_span
 from cxo_ai_companion.security.context import SecurityContext, create_system_context
+from cxo_ai_companion.utilities.caching.cache import CacheInterface
 
 logger = get_logger("services.pre_meeting")
 
@@ -104,6 +105,7 @@ class PreMeetingService:
         db: AsyncSession,
         graph_client: Any | None = None,
         ai_processor: Any | None = None,
+        cache: CacheInterface | None = None,
     ) -> None:
         """Initialize the pre-meeting service.
 
@@ -113,10 +115,12 @@ class PreMeetingService:
                 documents, and emails. Skips those sections if None.
             ai_processor: Optional AIProcessor for generating suggested
                 questions. Uses fallback heuristics if None.
+            cache: Optional cache for storing generated briefs.
         """
         self.db = db
         self.graph = graph_client
         self.ai_processor = ai_processor
+        self._cache = cache
 
     async def generate_brief(
         self,
@@ -136,6 +140,17 @@ class PreMeetingService:
             email threads, and AI-suggested questions.
         """
         ctx = ctx or create_system_context()
+
+        # Check cache for existing brief
+        cache_key = f"brief:{meeting_id}:{user_id}"
+        if self._cache is not None:
+            try:
+                cached = await self._cache.get(cache_key)
+                if cached is not None:
+                    logger.info("Cache hit for pre-meeting brief %s", meeting_id)
+                    return PreMeetingBrief(**cached)
+            except Exception:
+                logger.debug("Brief cache get failed, generating fresh brief")
 
         async with trace_span(
             "pre_meeting.generate_brief",
@@ -195,6 +210,28 @@ class PreMeetingService:
                 len(brief.related_documents),
                 len(brief.suggested_questions),
             )
+
+            # Cache the generated brief
+            if self._cache is not None:
+                try:
+                    import dataclasses
+
+                    def _serialize_brief(obj: Any) -> Any:
+                        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+                            return {k: _serialize_brief(v) for k, v in dataclasses.asdict(obj).items()}
+                        if isinstance(obj, datetime):
+                            return obj.isoformat()
+                        if isinstance(obj, UUID):
+                            return str(obj)
+                        return obj
+
+                    await self._cache.set(
+                        cache_key,
+                        _serialize_brief(brief),
+                        ttl_seconds=7200,
+                    )
+                except Exception:
+                    logger.debug("Brief cache set failed")
 
             return brief
 

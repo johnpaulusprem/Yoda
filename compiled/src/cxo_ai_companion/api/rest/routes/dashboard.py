@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cxo_ai_companion.dependencies import get_db
+from cxo_ai_companion.dependencies import get_db, get_cache
 from cxo_ai_companion.security.auth_dependency import get_current_user
 from cxo_ai_companion.security.context import SecurityContext
 from cxo_ai_companion.data_access.repositories import MeetingRepository, ActionItemRepository
@@ -24,6 +24,16 @@ router = APIRouter()
 @router.get("/stats")
 async def get_dashboard_stats(db: AsyncSession = Depends(get_db), ctx: SecurityContext = Depends(get_current_user)):
     """Return executive dashboard KPIs: meetings today, pending/overdue actions, completion rate, and docs to review."""
+    # Check cache first
+    cache_key = f"dashboard:stats:{ctx.user_id}"
+    try:
+        cache = get_cache()
+        cached = await cache.get(cache_key)
+        if cached is not None:
+            return cached
+    except (RuntimeError, Exception):
+        cache = None
+
     m_repo = MeetingRepository(db)
     a_repo = ActionItemRepository(db)
     upcoming = await m_repo.get_upcoming(hours=24)
@@ -39,13 +49,21 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), ctx: SecurityC
     )
     docs_to_review = docs_to_review_r.scalar_one()
 
-    return {
+    result = {
         "meetings_today": len(upcoming),
         "pending_actions": len(pending),
         "overdue_actions": len(overdue),
         "completion_rate": round(rate, 1),
         "docs_to_review": docs_to_review,
     }
+
+    if cache is not None:
+        try:
+            await cache.set(cache_key, result, ttl_seconds=120)
+        except Exception:
+            pass
+
+    return result
 
 
 @router.get("/attention-items")

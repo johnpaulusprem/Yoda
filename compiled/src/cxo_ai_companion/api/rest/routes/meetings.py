@@ -181,8 +181,13 @@ async def get_pre_meeting_brief(
 ):
     """Generate a pre-meeting brief for an executive."""
     from cxo_ai_companion.services.pre_meeting_service import PreMeetingService
+    from cxo_ai_companion.dependencies import get_cache
 
-    service = PreMeetingService(db)
+    try:
+        cache = get_cache()
+    except RuntimeError:
+        cache = None
+    service = PreMeetingService(db, cache=cache)
     brief = await service.generate_brief(meeting_id, ctx.user_id)
 
     return PreMeetingBriefResponse(
