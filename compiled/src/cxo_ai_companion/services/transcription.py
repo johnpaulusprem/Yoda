@@ -74,6 +74,7 @@ class TranscriptionHandler:
             "transcription.handle_connection",
             attributes={"meeting_id": meeting_id},
         ):
+            await websocket.accept()
             logger.info(
                 "Transcription WebSocket connected for meeting %s", meeting_id
             )

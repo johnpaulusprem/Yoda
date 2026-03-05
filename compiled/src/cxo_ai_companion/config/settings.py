@@ -58,6 +58,7 @@ class Settings(BaseSettings):
 
     NUDGE_CHECK_INTERVAL_MINUTES: int = 60
     NUDGE_COOLDOWN_HOURS: int = 4
+    NUDGE_ESCALATION_THRESHOLD: int = 3
     ESCALATION_DAYS: int = 3
 
     RATE_LIMIT_RPM: int = 100
@@ -70,6 +71,7 @@ class Settings(BaseSettings):
     OTEL_SERVICE_NAME: str = "cxo-ai-companion"
 
     GRAPH_WEBHOOK_SECRET: str = ""
+    ACS_CALLBACK_SECRET: str = ""
 
     # ─── Azure OpenAI Embeddings ──────────────────────────────────────
     AZURE_OPENAI_EMBEDDING_ENDPOINT: str = ""

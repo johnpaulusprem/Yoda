@@ -7,6 +7,7 @@ bot joins for Teams meetings.
 Ported from ``teams-meeting-assistant/app/services/calendar_watcher.py`` with:
 - CXO exceptions (CalendarError)
 - Structured logging from observability layer
+- Session-factory pattern: each operation creates its own DB session
 - Kept subscription lifecycle management
 - Kept APScheduler integration for bot auto-join
 """
@@ -14,12 +15,12 @@ Ported from ``teams-meeting-assistant/app/services/calendar_watcher.py`` with:
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cxo_ai_companion.exceptions import CalendarError
 from cxo_ai_companion.models.meeting import Meeting
@@ -42,32 +43,21 @@ _RESOURCE_RE = re.compile(
 class CalendarWatcher:
     """Watches opted-in user calendars via Graph subscriptions.
 
-    Responsibilities:
-    - Create / renew / delete Graph change notification subscriptions.
-    - Process incoming webhook payloads (created / updated / deleted events).
-    - Store detected Teams meetings in the database.
-    - Schedule APScheduler jobs so the ACS bot joins before each meeting.
+    Uses a session-factory pattern: each operation (setup, renew, webhook)
+    creates its own short-lived DB session, avoiding stale-session issues
+    from long-lived service instances stored in ``app.state``.
     """
 
     def __init__(
         self,
         graph_client: GraphClient,
-        db: AsyncSession,
+        session_factory: async_sessionmaker[AsyncSession],
         scheduler: Any,  # APScheduler AsyncIOScheduler
         settings: Any,
         ctx: SecurityContext | None = None,
     ) -> None:
-        """Initialize the calendar watcher.
-
-        Args:
-            graph_client: GraphClient for subscription and event API calls.
-            db: Async SQLAlchemy session for persisting subscriptions and meetings.
-            scheduler: APScheduler AsyncIOScheduler for scheduling bot joins.
-            settings: Application settings (BASE_URL, BOT_JOIN_BEFORE_MINUTES).
-            ctx: Optional security context; defaults to system context.
-        """
         self.graph = graph_client
-        self.db = db
+        self._session_factory = session_factory
         self.scheduler = scheduler
         self.settings = settings
         self._ctx = ctx or create_system_context()
@@ -79,182 +69,171 @@ class CalendarWatcher:
     async def setup_subscriptions(self) -> None:
         """Create Graph calendar subscriptions for every opted-in user.
 
-        Called once on application startup. For each opted-in user that does
-        not yet have an active subscription, we create a new one via the
-        Graph API and persist it in the ``graph_subscriptions`` table.
+        Called once on application startup.
         """
         async with trace_span("calendar_watcher.setup_subscriptions"):
-            result = await self.db.execute(
-                select(UserPreference).where(UserPreference.auto_join_enabled.is_(True))
-            )
-            opted_in_users = result.scalars().all()
-
-            if not opted_in_users:
-                logger.info("No opted-in users found; skipping subscription setup")
-                return
-
-            webhook_url = f"{self.settings.BASE_URL}/webhooks/graph"
-
-            for user_pref in opted_in_users:
-                # Check whether we already have an active subscription for this user
-                existing = await self.db.execute(
-                    select(GraphSubscription).where(
-                        GraphSubscription.user_id == user_pref.user_id,
-                        GraphSubscription.status == "active",
-                    )
+            async with self._session_factory() as db:
+                result = await db.execute(
+                    select(UserPreference).where(UserPreference.auto_join_enabled.is_(True))
                 )
-                if existing.scalar_one_or_none() is not None:
-                    logger.info(
-                        "Active subscription already exists",
-                        extra={"user_id": user_pref.user_id},
+                opted_in_users = result.scalars().all()
+
+                if not opted_in_users:
+                    logger.info("No opted-in users found; skipping subscription setup")
+                    return
+
+                webhook_url = f"{self.settings.BASE_URL}/api/webhooks/graph"
+
+                for user_pref in opted_in_users:
+                    # Check whether we already have an active subscription for this user
+                    existing = await db.execute(
+                        select(GraphSubscription).where(
+                            GraphSubscription.user_id == user_pref.user_id,
+                            GraphSubscription.status == "active",
+                        )
                     )
-                    continue
+                    if existing.scalar_one_or_none() is not None:
+                        logger.info(
+                            "Active subscription already exists",
+                            extra={"user_id": user_pref.user_id},
+                        )
+                        continue
 
-                try:
-                    sub_data = await self.graph.create_subscription(
-                        user_id=user_pref.user_id,
-                        webhook_url=webhook_url,
-                        ctx=self._ctx,
-                    )
-
-                    expiration = datetime.fromisoformat(
-                        sub_data["expirationDateTime"].replace("Z", "+00:00")
-                    )
-
-                    subscription = GraphSubscription(
-                        subscription_id=sub_data["id"],
-                        user_id=user_pref.user_id,
-                        resource=sub_data["resource"],
-                        notification_url=webhook_url,
-                        expiration=expiration,
-                        status="active",
-                    )
-                    self.db.add(subscription)
-                    await self.db.commit()
-
-                    logger.info(
-                        "Created subscription for user",
-                        extra={
-                            "user_id": user_pref.user_id,
-                            "subscription_id": sub_data["id"],
-                        },
-                    )
-                except Exception as exc:
-                    logger.exception(
-                        "Failed to create subscription for user",
-                        extra={"user_id": user_pref.user_id},
-                    )
-                    raise CalendarError(
-                        message=f"Failed to create subscription for user {user_pref.user_id}",
-                        subscription_id=None,
-                        cause=exc,
-                    ) from exc
-
-    async def renew_subscriptions(self) -> None:
-        """Renew Graph subscriptions that are expiring within 6 hours.
-
-        This is run periodically (every 12 hours) by APScheduler. If renewal
-        fails, the old subscription is marked ``failed`` and a brand-new
-        subscription is created.
-        """
-        async with trace_span("calendar_watcher.renew_subscriptions"):
-            threshold = datetime.now(timezone.utc) + timedelta(hours=6)
-            result = await self.db.execute(
-                select(GraphSubscription).where(
-                    GraphSubscription.status == "active",
-                    GraphSubscription.expiration <= threshold,
-                )
-            )
-            expiring = result.scalars().all()
-
-            if not expiring:
-                logger.info("No subscriptions need renewal")
-                return
-
-            webhook_url = f"{self.settings.BASE_URL}/webhooks/graph"
-
-            for sub in expiring:
-                new_expiration = datetime.now(timezone.utc) + timedelta(days=3)
-                try:
-                    await self.graph.renew_subscription(
-                        subscription_id=sub.subscription_id,
-                        new_expiration=new_expiration,
-                        ctx=self._ctx,
-                    )
-                    sub.expiration = new_expiration
-                    await self.db.commit()
-                    logger.info(
-                        "Renewed subscription",
-                        extra={
-                            "subscription_id": sub.subscription_id,
-                            "user_id": sub.user_id,
-                            "new_expiration": new_expiration.isoformat(),
-                        },
-                    )
-                except Exception:
-                    logger.exception(
-                        "Failed to renew subscription -- recreating",
-                        extra={"subscription_id": sub.subscription_id},
-                    )
-                    sub.status = "failed"
-                    await self.db.commit()
-
-                    # Attempt to create a fresh subscription
                     try:
                         sub_data = await self.graph.create_subscription(
-                            user_id=sub.user_id,
+                            user_id=user_pref.user_id,
                             webhook_url=webhook_url,
                             ctx=self._ctx,
                         )
+
                         expiration = datetime.fromisoformat(
                             sub_data["expirationDateTime"].replace("Z", "+00:00")
                         )
-                        new_sub = GraphSubscription(
+
+                        subscription = GraphSubscription(
                             subscription_id=sub_data["id"],
-                            user_id=sub.user_id,
+                            user_id=user_pref.user_id,
                             resource=sub_data["resource"],
                             notification_url=webhook_url,
                             expiration=expiration,
                             status="active",
                         )
-                        self.db.add(new_sub)
-                        await self.db.commit()
+                        db.add(subscription)
+                        await db.commit()
+
                         logger.info(
-                            "Recreated subscription after renewal failure",
+                            "Created subscription for user",
                             extra={
+                                "user_id": user_pref.user_id,
+                                "subscription_id": sub_data["id"],
+                            },
+                        )
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to create subscription for user",
+                            extra={"user_id": user_pref.user_id},
+                        )
+                        raise CalendarError(
+                            message=f"Failed to create subscription for user {user_pref.user_id}",
+                            subscription_id=None,
+                            cause=exc,
+                        ) from exc
+
+    async def renew_subscriptions(self) -> None:
+        """Renew Graph subscriptions that are expiring within 6 hours.
+
+        Run periodically (every 12 hours) by APScheduler.
+        """
+        async with trace_span("calendar_watcher.renew_subscriptions"):
+            async with self._session_factory() as db:
+                threshold = datetime.now(timezone.utc) + timedelta(hours=6)
+                result = await db.execute(
+                    select(GraphSubscription).where(
+                        GraphSubscription.status == "active",
+                        GraphSubscription.expiration <= threshold,
+                    )
+                )
+                expiring = result.scalars().all()
+
+                if not expiring:
+                    logger.info("No subscriptions need renewal")
+                    return
+
+                webhook_url = f"{self.settings.BASE_URL}/api/webhooks/graph"
+
+                for sub in expiring:
+                    new_expiration = datetime.now(timezone.utc) + timedelta(days=3)
+                    try:
+                        await self.graph.renew_subscription(
+                            subscription_id=sub.subscription_id,
+                            new_expiration=new_expiration,
+                            ctx=self._ctx,
+                        )
+                        sub.expiration = new_expiration
+                        await db.commit()
+                        logger.info(
+                            "Renewed subscription",
+                            extra={
+                                "subscription_id": sub.subscription_id,
                                 "user_id": sub.user_id,
-                                "new_subscription_id": sub_data["id"],
+                                "new_expiration": new_expiration.isoformat(),
                             },
                         )
                     except Exception:
                         logger.exception(
-                            "Failed to recreate subscription",
-                            extra={"user_id": sub.user_id},
+                            "Failed to renew subscription -- recreating",
+                            extra={"subscription_id": sub.subscription_id},
                         )
+                        sub.status = "failed"
+                        await db.commit()
+
+                        # Attempt to create a fresh subscription
+                        try:
+                            sub_data = await self.graph.create_subscription(
+                                user_id=sub.user_id,
+                                webhook_url=webhook_url,
+                                ctx=self._ctx,
+                            )
+                            expiration = datetime.fromisoformat(
+                                sub_data["expirationDateTime"].replace("Z", "+00:00")
+                            )
+                            new_sub = GraphSubscription(
+                                subscription_id=sub_data["id"],
+                                user_id=sub.user_id,
+                                resource=sub_data["resource"],
+                                notification_url=webhook_url,
+                                expiration=expiration,
+                                status="active",
+                            )
+                            db.add(new_sub)
+                            await db.commit()
+                            logger.info(
+                                "Recreated subscription after renewal failure",
+                                extra={
+                                    "user_id": sub.user_id,
+                                    "new_subscription_id": sub_data["id"],
+                                },
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Failed to recreate subscription",
+                                extra={"user_id": sub.user_id},
+                            )
 
     # ------------------------------------------------------------------
     # Webhook Processing
     # ------------------------------------------------------------------
 
-    async def handle_webhook(self, payload: dict[str, Any]) -> None:
-        """Process a Graph change notification webhook payload.
+    async def handle_webhook(self, notification: dict[str, Any]) -> None:
+        """Process a single Graph change notification.
 
-        Called in a FastAPI ``BackgroundTask`` so the HTTP response is
-        returned within 3 seconds (Graph requirement).
-
-        Steps for each notification:
-        1. Extract ``user_id`` and ``event_id`` from the resource path.
-        2. Fetch full event details from Graph.
-        3. Skip events that are not Teams meetings (no ``joinWebUrl``).
-        4. For ``created`` -- store the meeting and schedule a bot join.
-        5. For ``updated`` -- update meeting details; reschedule if start changed.
-        6. For ``deleted`` -- cancel the scheduled join and mark cancelled.
+        Called from the webhook route for each validated notification.
+        Creates its own DB session to avoid stale-session issues.
         """
         async with trace_span("calendar_watcher.handle_webhook"):
-            notifications = payload.get("value", [])
-            for notification in notifications:
+            async with self._session_factory() as db:
                 try:
-                    await self._process_notification(notification)
+                    await self._process_notification(db, notification)
                 except Exception:
                     logger.exception(
                         "Error processing notification",
@@ -265,7 +244,9 @@ class CalendarWatcher:
                         },
                     )
 
-    async def _process_notification(self, notification: dict[str, Any]) -> None:
+    async def _process_notification(
+        self, db: AsyncSession, notification: dict[str, Any]
+    ) -> None:
         """Handle a single Graph change notification."""
         resource = notification.get("resource", "")
         change_type = notification.get("changeType", "")
@@ -282,7 +263,7 @@ class CalendarWatcher:
         event_id = match.group("event_id")
 
         if change_type == "deleted":
-            await self._handle_deleted(event_id)
+            await self._handle_deleted(db, event_id)
             return
 
         # For created / updated we need full event details
@@ -300,22 +281,22 @@ class CalendarWatcher:
             return
 
         if change_type == "created":
-            await self._handle_created(event, user_id, join_url)
+            await self._handle_created(db, event, user_id, join_url)
         elif change_type == "updated":
-            await self._handle_updated(event, user_id, join_url)
+            await self._handle_updated(db, event, user_id, join_url)
 
     # ------------------------------------------------------------------
     # Notification handlers
     # ------------------------------------------------------------------
 
     async def _handle_created(
-        self, event: dict[str, Any], user_id: str, join_url: str | None
+        self, db: AsyncSession, event: dict[str, Any], user_id: str, join_url: str | None
     ) -> None:
         """Store a newly-created Teams meeting and schedule a bot join."""
         event_id = event["id"]
 
         # Avoid duplicate meetings
-        existing = await self.db.execute(
+        existing = await db.execute(
             select(Meeting).where(Meeting.teams_meeting_id == event_id)
         )
         if existing.scalar_one_or_none() is not None:
@@ -347,9 +328,9 @@ class CalendarWatcher:
             scheduled_end=scheduled_end,
             status="scheduled",
         )
-        self.db.add(meeting)
-        await self.db.commit()
-        await self.db.refresh(meeting)
+        db.add(meeting)
+        await db.commit()
+        await db.refresh(meeting)
 
         logger.info(
             "Stored new meeting",
@@ -363,19 +344,19 @@ class CalendarWatcher:
         await self.schedule_bot_join(meeting)
 
     async def _handle_updated(
-        self, event: dict[str, Any], user_id: str, join_url: str | None
+        self, db: AsyncSession, event: dict[str, Any], user_id: str, join_url: str | None
     ) -> None:
         """Update an existing meeting and reschedule the bot join if needed."""
         event_id = event["id"]
 
-        result = await self.db.execute(
+        result = await db.execute(
             select(Meeting).where(Meeting.teams_meeting_id == event_id)
         )
         meeting = result.scalar_one_or_none()
 
         if meeting is None:
             # The update is for a meeting we haven't seen -- treat as created
-            await self._handle_created(event, user_id, join_url)
+            await self._handle_created(db, event, user_id, join_url)
             return
 
         new_start = _parse_graph_datetime(event["start"])
@@ -399,7 +380,7 @@ class CalendarWatcher:
         if organizer_info.get("address"):
             meeting.organizer_email = organizer_info["address"]
 
-        await self.db.commit()
+        await db.commit()
 
         logger.info(
             "Updated meeting",
@@ -418,9 +399,9 @@ class CalendarWatcher:
                 pass  # Job may not exist
             await self.schedule_bot_join(meeting)
 
-    async def _handle_deleted(self, event_id: str) -> None:
+    async def _handle_deleted(self, db: AsyncSession, event_id: str) -> None:
         """Cancel a scheduled bot join and mark the meeting as cancelled."""
-        result = await self.db.execute(
+        result = await db.execute(
             select(Meeting).where(Meeting.teams_meeting_id == event_id)
         )
         meeting = result.scalar_one_or_none()
@@ -432,7 +413,7 @@ class CalendarWatcher:
             return
 
         meeting.status = "cancelled"
-        await self.db.commit()
+        await db.commit()
 
         # Cancel the scheduled join job
         job_id = f"join_{meeting.id}"
@@ -496,12 +477,7 @@ class CalendarWatcher:
 
 
 def _parse_graph_datetime(dt_dict: dict[str, Any]) -> datetime:
-    """Parse a Graph ``dateTimeTimeZone`` resource into a timezone-aware datetime.
-
-    Graph returns event start/end as::
-
-        {"dateTime": "2026-03-04T10:00:00.0000000", "timeZone": "UTC"}
-    """
+    """Parse a Graph ``dateTimeTimeZone`` resource into a timezone-aware datetime."""
     raw = dt_dict.get("dateTime", "")
     tz_name = dt_dict.get("timeZone", "UTC")
 
@@ -534,25 +510,41 @@ def _extract_thread_id(join_url: str) -> str:
 async def _execute_bot_join(meeting_id: str) -> None:
     """APScheduler job function that joins a meeting via ACS.
 
-    This is a standalone async function so APScheduler can serialize / invoke
-    it. It creates a fresh DB session to avoid stale session issues from the
-    long-lived scheduler.
+    Creates a fresh DB session factory reference to avoid stale session issues.
+    Delegates status checks and DB operations to ACSCallService.join_meeting().
     """
     logger.info("Executing scheduled bot join", extra={"meeting_id": meeting_id})
 
-    # Lazy imports to avoid circular dependencies
-    from cxo_ai_companion.config import get_settings  # type: ignore[import-untyped]
+    from cxo_ai_companion.dependencies import get_settings, get_session_factory
+    from cxo_ai_companion.services.acs_call_service import ACSCallService
 
     try:
         settings = get_settings()
+        session_factory = get_session_factory()
     except Exception:
         logger.exception(
-            "Could not load settings for scheduled bot join",
+            "Could not initialize for scheduled bot join",
             extra={"meeting_id": meeting_id},
         )
         return
 
-    logger.info(
-        "Scheduled bot join triggered -- ACS service will join the meeting",
-        extra={"meeting_id": meeting_id},
-    )
+    try:
+        meeting_uuid = uuid.UUID(meeting_id)
+    except ValueError:
+        logger.error("Invalid meeting_id format: %s", meeting_id)
+        return
+
+    acs_service = ACSCallService(settings, session_factory)
+    try:
+        call_connection_id = await acs_service.join_meeting(meeting_uuid)
+        if call_connection_id:
+            logger.info(
+                "Bot joined meeting %s, call_connection_id=%s",
+                meeting_id,
+                call_connection_id,
+            )
+    except Exception:
+        logger.exception(
+            "Failed to join meeting %s via ACS",
+            meeting_id,
+        )

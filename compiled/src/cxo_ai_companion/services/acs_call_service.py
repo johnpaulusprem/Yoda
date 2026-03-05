@@ -7,7 +7,7 @@ Ported from ``teams-meeting-assistant/app/services/acs_call_service.py`` with:
 - CXO exceptions (ACSError)
 - Tracing spans via observability
 - Metrics tracking (meetings_joined, meetings_failed)
-- Kept join_meeting, handle_callback, leave_meeting, _run_post_processing
+- Session-factory pattern: each operation creates its own DB session
 """
 
 from __future__ import annotations
@@ -17,16 +17,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from azure.communication.callautomation import (
-    CallAutomationClient,
-    MediaStreamingAudioChannelType,
-    MediaStreamingContentType,
-    MediaStreamingOptions,
-    StreamingTransportType,
-    TranscriptionOptions,
-)
+from azure.communication.callautomation import CallAutomationClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
 from cxo_ai_companion.exceptions import ACSError
@@ -44,21 +37,21 @@ logger = get_logger("services.acs_call_service")
 class ACSCallService:
     """Manages ACS Call Automation lifecycle for Teams meetings.
 
-    Handles joining meetings via Call Automation, routing callback events
-    (connect, disconnect, participant updates), and triggering the
-    post-meeting AI pipeline when the call ends.
+    Uses a session-factory pattern: each operation (join, callback, post-processing)
+    creates its own short-lived DB session, avoiding stale-session issues from
+    long-lived service instances stored in ``app.state``.
 
     Args:
         settings: Application settings (ACS_CONNECTION_STRING, BASE_URL).
-        db: Async SQLAlchemy session for meeting state persistence.
+        session_factory: Async session factory for creating per-operation DB sessions.
     """
 
-    def __init__(self, settings: Any, db: AsyncSession) -> None:
+    def __init__(self, settings: Any, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.client = CallAutomationClient.from_connection_string(
             settings.ACS_CONNECTION_STRING
         )
         self.settings = settings
-        self.db = db
+        self._session_factory = session_factory
 
         # Optional references to downstream services -- attached after
         # construction by the lifespan / DI layer.
@@ -70,94 +63,134 @@ class ACSCallService:
     # Join meeting
     # ------------------------------------------------------------------
 
-    async def join_meeting(self, meeting: Meeting) -> str:
+    async def join_meeting(self, meeting_id: uuid.UUID) -> str:
         """Join a Teams meeting using ACS Call Automation.
 
-        Configures media streaming and transcription WebSocket endpoints,
-        creates the call, and persists the connection ID.
+        Uses the ACS REST API ``createCall`` with ``teamsMeetingLink`` to join
+        an existing Teams meeting.  The Python SDK v1.5.0 ``CreateCallRequest``
+        model does not expose ``teamsMeetingLink``, so we pass raw JSON bytes
+        to the generated client which accepts ``IO[bytes]``.
 
         Args:
-            meeting: The Meeting ORM object with join_url and schedule data.
+            meeting_id: UUID of the Meeting record to join.
 
         Returns:
-            The ACS ``call_connection_id`` for the joined call.
+            The ACS ``call_connection_id`` for the joined call, or empty
+            string if the meeting was skipped (wrong status).
 
         Raises:
             ACSError: When the call fails to be created.
         """
         async with trace_span(
             "acs.join_meeting",
-            attributes={
-                "meeting_id": str(meeting.id),
-                "subject": meeting.subject,
-            },
+            attributes={"meeting_id": str(meeting_id)},
         ):
-            logger.info(
-                "Joining meeting %s (%s)",
-                meeting.id,
-                meeting.subject,
-            )
+            async with self._session_factory() as db:
+                stmt = select(Meeting).where(Meeting.id == meeting_id)
+                result = await db.execute(stmt)
+                meeting = result.scalar_one_or_none()
 
-            # Derive WebSocket base from the public BASE_URL.
-            ws_base = self.settings.BASE_URL.replace(
-                "https://", "wss://"
-            ).replace("http://", "ws://")
+                if meeting is None:
+                    raise ACSError(
+                        message=f"Meeting {meeting_id} not found",
+                        call_connection_id=None,
+                        operation="join_meeting",
+                    )
 
-            media_streaming = MediaStreamingOptions(
-                transport_url=f"{ws_base}/ws/audio/{meeting.id}",
-                transport_type=StreamingTransportType.WEBSOCKET,
-                content_type=MediaStreamingContentType.AUDIO,
-                audio_channel_type=MediaStreamingAudioChannelType.UNMIXED,
-            )
+                if meeting.status not in ("scheduled", "failed"):
+                    logger.info(
+                        "Skipping join for meeting %s — status is '%s'",
+                        meeting_id,
+                        meeting.status,
+                    )
+                    return ""
 
-            transcription = TranscriptionOptions(
-                transport_url=f"{ws_base}/ws/transcription/{meeting.id}",
-                transport_type=StreamingTransportType.WEBSOCKET,
-                locale="en-US",
-                start_transcription=True,
-            )
-
-            callback_url = f"{self.settings.BASE_URL}/callbacks/acs"
-
-            try:
-                call_connection_properties = await asyncio.to_thread(
-                    self.client.create_group_call,
-                    target_participant=meeting.join_url,
-                    callback_url=callback_url,
-                    media_streaming=media_streaming,
-                    transcription=transcription,
-                )
-
-                call_connection_id: str = call_connection_properties.call_connection_id
                 logger.info(
-                    "ACS call created for meeting %s, call_connection_id=%s",
+                    "Joining meeting %s (%s)",
                     meeting.id,
-                    call_connection_id,
+                    meeting.subject,
                 )
 
-                # Update meeting record.
-                meeting.status = "in_progress"
-                meeting.acs_call_connection_id = call_connection_id
-                meeting.actual_start = datetime.now(timezone.utc)
-                self.db.add(meeting)
-                await self.db.commit()
-                await self.db.refresh(meeting)
+                if not meeting.join_url:
+                    raise ACSError(
+                        message=f"Meeting {meeting_id} has no join_url",
+                        call_connection_id=None,
+                        operation="join_meeting",
+                    )
 
-                metrics["meetings_joined"].add(1)
-                return call_connection_id
+                # Derive WebSocket base from the public BASE_URL.
+                ws_base = self.settings.BASE_URL.replace(
+                    "https://", "wss://"
+                ).replace("http://", "ws://")
 
-            except Exception as exc:
-                logger.exception("Failed to join meeting %s", meeting.id)
-                meeting.status = "failed"
-                self.db.add(meeting)
-                await self.db.commit()
-                metrics["meetings_failed"].add(1)
-                raise ACSError(
-                    message=f"Failed to join meeting {meeting.id}",
-                    call_connection_id=None,
-                    operation="join_meeting",
-                    cause=exc,
-                ) from exc
+                callback_url = f"{self.settings.BASE_URL}/api/callbacks/acs/events"
+
+                # Build the raw JSON request body with teamsMeetingLink.
+                # The SDK's CreateCallRequest model doesn't expose this field,
+                # but the REST API (2025-06-15) supports it.  The generated
+                # client's create_call() accepts IO[bytes] as an alternative
+                # to the model object.
+                import io
+                import json as _json
+
+                request_body = {
+                    "teamsMeetingLink": meeting.join_url,
+                    "callbackUri": callback_url,
+                    "sourceDisplayName": "CXO AI Companion",
+                    "mediaStreamingOptions": {
+                        "transportUrl": f"{ws_base}/ws/audio/{meeting.id}",
+                        "transportType": "websocket",
+                        "contentType": "audio",
+                        "audioChannelType": "unmixed",
+                    },
+                    "transcriptionOptions": {
+                        "transportUrl": f"{ws_base}/ws/transcription/{meeting.id}",
+                        "transportType": "websocket",
+                        "locale": "en-US",
+                        "startTranscription": True,
+                    },
+                }
+
+                try:
+                    call_connection_properties = await asyncio.to_thread(
+                        self.client._client.create_call,
+                        create_call_request=io.BytesIO(_json.dumps(request_body).encode("utf-8")),
+                    )
+
+                    # The generated client returns the raw model; extract
+                    # call_connection_id from either attribute or dict access.
+                    if hasattr(call_connection_properties, "call_connection_id"):
+                        call_connection_id: str = call_connection_properties.call_connection_id
+                    else:
+                        call_connection_id = call_connection_properties["callConnectionId"]
+                    logger.info(
+                        "ACS call created for meeting %s, call_connection_id=%s",
+                        meeting.id,
+                        call_connection_id,
+                    )
+
+                    # Update meeting record.
+                    meeting.status = "in_progress"
+                    meeting.acs_call_connection_id = call_connection_id
+                    meeting.actual_start = datetime.now(timezone.utc)
+                    db.add(meeting)
+                    await db.commit()
+
+                    metrics["meetings_joined"].add(1)
+                    return call_connection_id
+
+                except Exception as exc:
+                    logger.exception("Failed to join meeting %s", meeting.id)
+                    meeting.status = "failed"
+                    db.add(meeting)
+                    await db.commit()
+                    metrics["meetings_failed"].add(1)
+                    raise ACSError(
+                        message=f"Failed to join meeting {meeting_id}",
+                        call_connection_id=None,
+                        operation="join_meeting",
+                        cause=exc,
+                    ) from exc
 
     # ------------------------------------------------------------------
     # Callback event dispatcher
@@ -166,16 +199,10 @@ class ACSCallService:
     async def handle_callback(self, event: dict[str, Any]) -> None:
         """Route an ACS Call Automation CloudEvent to the appropriate handler.
 
+        Creates a fresh DB session per callback to avoid stale-session issues.
+
         Args:
             event: CloudEvent dict with ``type`` and ``data`` fields.
-
-        Handles:
-            - CallConnected
-            - CallDisconnected  (triggers post-processing pipeline)
-            - ParticipantsUpdated
-            - TranscriptionStarted / TranscriptionStopped
-            - MediaStreamingStarted / MediaStreamingStopped
-            - PlayCompleted / PlayFailed
         """
         async with trace_span("acs.handle_callback"):
             # Extract event type and call connection ID
@@ -203,7 +230,8 @@ class ACSCallService:
             }.get(event_name)
 
             if handler is not None:
-                await handler(call_connection_id, data)
+                async with self._session_factory() as db:
+                    await handler(db, call_connection_id, data)
             else:
                 logger.warning("Unhandled ACS event type: %s", event_name)
 
@@ -212,10 +240,10 @@ class ACSCallService:
     # ------------------------------------------------------------------
 
     async def _on_call_connected(
-        self, call_connection_id: str | None, data: dict[str, Any]
+        self, db: AsyncSession, call_connection_id: str | None, data: dict[str, Any]
     ) -> None:
         """Bot successfully joined the meeting."""
-        meeting = await self._meeting_by_call_connection(call_connection_id)
+        meeting = await self._meeting_by_call_connection(db, call_connection_id)
         if meeting is None:
             logger.warning(
                 "CallConnected for unknown call_connection_id=%s",
@@ -232,18 +260,18 @@ class ACSCallService:
         if meeting.status != "in_progress":
             meeting.status = "in_progress"
             meeting.actual_start = meeting.actual_start or datetime.now(timezone.utc)
-            self.db.add(meeting)
-            await self.db.commit()
+            db.add(meeting)
+            await db.commit()
 
     async def _on_call_disconnected(
-        self, call_connection_id: str | None, data: dict[str, Any]
+        self, db: AsyncSession, call_connection_id: str | None, data: dict[str, Any]
     ) -> None:
         """Meeting ended or bot was removed.
 
         1. Mark meeting as completed, record actual_end.
         2. Fire the post-processing pipeline as a background task.
         """
-        meeting = await self._meeting_by_call_connection(call_connection_id)
+        meeting = await self._meeting_by_call_connection(db, call_connection_id)
         if meeting is None:
             logger.warning(
                 "CallDisconnected for unknown call_connection_id=%s",
@@ -259,18 +287,17 @@ class ACSCallService:
 
         meeting.status = "completed"
         meeting.actual_end = datetime.now(timezone.utc)
-        self.db.add(meeting)
-        await self.db.commit()
-        await self.db.refresh(meeting)
+        db.add(meeting)
+        await db.commit()
 
-        # Trigger post-processing in the background
+        # Trigger post-processing in the background (creates its own session)
         asyncio.create_task(self._run_post_processing(meeting.id))
 
     async def _on_participants_updated(
-        self, call_connection_id: str | None, data: dict[str, Any]
+        self, db: AsyncSession, call_connection_id: str | None, data: dict[str, Any]
     ) -> None:
         """Someone joined or left -- update the participant roster."""
-        meeting = await self._meeting_by_call_connection(call_connection_id)
+        meeting = await self._meeting_by_call_connection(db, call_connection_id)
         if meeting is None:
             return
 
@@ -281,14 +308,15 @@ class ACSCallService:
         now = datetime.now(timezone.utc)
 
         for p in participants_data:
-            raw_id = p.get("rawId", "")
+            identifier = p.get("identifier", {})
+            raw_id = identifier.get("rawId", "") if isinstance(identifier, dict) else p.get("rawId", "")
             display_name = p.get("displayName", "Unknown")
 
             stmt = select(MeetingParticipant).where(
                 MeetingParticipant.meeting_id == meeting.id,
                 MeetingParticipant.user_id == raw_id,
             )
-            result = await self.db.execute(stmt)
+            result = await db.execute(stmt)
             existing = result.scalar_one_or_none()
 
             if existing is None:
@@ -299,20 +327,20 @@ class ACSCallService:
                     role="attendee",
                     joined_at=now,
                 )
-                self.db.add(participant)
+                db.add(participant)
             else:
                 if existing.display_name == "Unknown" and display_name != "Unknown":
                     existing.display_name = display_name
-                    self.db.add(existing)
+                    db.add(existing)
 
         # Update participant count on the meeting.
         count_stmt = select(MeetingParticipant).where(
             MeetingParticipant.meeting_id == meeting.id
         )
-        count_result = await self.db.execute(count_stmt)
+        count_result = await db.execute(count_stmt)
         meeting.participant_count = len(count_result.scalars().all())
-        self.db.add(meeting)
-        await self.db.commit()
+        db.add(meeting)
+        await db.commit()
 
         logger.info(
             "Participants updated for meeting %s, count=%d",
@@ -321,7 +349,7 @@ class ACSCallService:
         )
 
     async def _on_transcription_started(
-        self, call_connection_id: str | None, data: dict[str, Any]
+        self, db: AsyncSession, call_connection_id: str | None, data: dict[str, Any]
     ) -> None:
         logger.info(
             "Transcription started for call_connection_id=%s",
@@ -329,7 +357,7 @@ class ACSCallService:
         )
 
     async def _on_transcription_stopped(
-        self, call_connection_id: str | None, data: dict[str, Any]
+        self, db: AsyncSession, call_connection_id: str | None, data: dict[str, Any]
     ) -> None:
         logger.info(
             "Transcription stopped for call_connection_id=%s",
@@ -337,7 +365,7 @@ class ACSCallService:
         )
 
     async def _on_media_streaming_started(
-        self, call_connection_id: str | None, data: dict[str, Any]
+        self, db: AsyncSession, call_connection_id: str | None, data: dict[str, Any]
     ) -> None:
         logger.info(
             "Media streaming started for call_connection_id=%s",
@@ -345,7 +373,7 @@ class ACSCallService:
         )
 
     async def _on_media_streaming_stopped(
-        self, call_connection_id: str | None, data: dict[str, Any]
+        self, db: AsyncSession, call_connection_id: str | None, data: dict[str, Any]
     ) -> None:
         logger.info(
             "Media streaming stopped for call_connection_id=%s",
@@ -353,7 +381,7 @@ class ACSCallService:
         )
 
     async def _on_play_completed(
-        self, call_connection_id: str | None, data: dict[str, Any]
+        self, db: AsyncSession, call_connection_id: str | None, data: dict[str, Any]
     ) -> None:
         logger.info(
             "Play completed for call_connection_id=%s",
@@ -361,7 +389,7 @@ class ACSCallService:
         )
 
     async def _on_play_failed(
-        self, call_connection_id: str | None, data: dict[str, Any]
+        self, db: AsyncSession, call_connection_id: str | None, data: dict[str, Any]
     ) -> None:
         logger.warning(
             "Play failed for call_connection_id=%s  result=%s",
@@ -374,11 +402,7 @@ class ACSCallService:
     # ------------------------------------------------------------------
 
     async def start_transcription(self, call_connection_id: str) -> None:
-        """Explicitly start transcription if not auto-started.
-
-        Args:
-            call_connection_id: ACS call connection ID for the active call.
-        """
+        """Explicitly start transcription if not auto-started."""
         async with trace_span(
             "acs.start_transcription",
             attributes={"call_connection_id": call_connection_id},
@@ -388,11 +412,7 @@ class ACSCallService:
             await asyncio.to_thread(call_connection.start_transcription, locale="en-US")
 
     async def stop_transcription(self, call_connection_id: str) -> None:
-        """Stop transcription before leaving the call.
-
-        Args:
-            call_connection_id: ACS call connection ID for the active call.
-        """
+        """Stop transcription before leaving the call."""
         async with trace_span(
             "acs.stop_transcription",
             attributes={"call_connection_id": call_connection_id},
@@ -409,12 +429,6 @@ class ACSCallService:
         """Gracefully leave the meeting.
 
         ``is_for_everyone=False`` ensures only the bot leaves, not all participants.
-
-        Args:
-            call_connection_id: ACS call connection ID for the active call.
-
-        Raises:
-            ACSError: When the hang-up operation fails.
         """
         async with trace_span(
             "acs.leave_meeting",
@@ -433,21 +447,54 @@ class ACSCallService:
                 ) from exc
 
     # ------------------------------------------------------------------
-    # Post-processing pipeline
+    # Post-processing pipeline (with single retry)
     # ------------------------------------------------------------------
 
     async def _run_post_processing(self, meeting_id: uuid.UUID) -> None:
         """Assemble transcript, run AI processing, and deliver the summary.
 
         Executed as a background task after ``CallDisconnected``.
+        Retries once after 30 seconds if the first attempt fails.
         """
+        for attempt in range(2):
+            try:
+                await self._run_post_processing_attempt(meeting_id)
+                return
+            except Exception:
+                if attempt == 0:
+                    logger.warning(
+                        "Post-processing attempt 1 failed for meeting %s, retrying in 30s",
+                        meeting_id,
+                    )
+                    await asyncio.sleep(30)
+                else:
+                    logger.exception(
+                        "Post-processing failed after retry for meeting %s",
+                        meeting_id,
+                    )
+                    try:
+                        async with self._session_factory() as db:
+                            stmt = select(Meeting).where(Meeting.id == meeting_id)
+                            result = await db.execute(stmt)
+                            meeting = result.scalar_one_or_none()
+                            if meeting is not None:
+                                meeting.status = "failed"
+                                db.add(meeting)
+                                await db.commit()
+                    except Exception:
+                        logger.exception(
+                            "Failed to mark meeting %s as failed", meeting_id
+                        )
+
+    async def _run_post_processing_attempt(self, meeting_id: uuid.UUID) -> None:
+        """Single attempt at post-processing."""
         async with trace_span(
             "acs.post_processing",
             attributes={"meeting_id": str(meeting_id)},
         ):
             logger.info("Starting post-processing for meeting %s", meeting_id)
 
-            try:
+            async with self._session_factory() as db:
                 stmt = (
                     select(Meeting)
                     .where(Meeting.id == meeting_id)
@@ -456,7 +503,7 @@ class ACSCallService:
                         selectinload(Meeting.participants),
                     )
                 )
-                result = await self.db.execute(stmt)
+                result = await db.execute(stmt)
                 meeting = result.scalar_one_or_none()
                 if meeting is None:
                     logger.error(
@@ -533,29 +580,12 @@ class ACSCallService:
 
                 logger.info("Post-processing completed for meeting %s", meeting_id)
 
-            except Exception:
-                logger.exception(
-                    "Post-processing failed for meeting %s", meeting_id
-                )
-                try:
-                    stmt = select(Meeting).where(Meeting.id == meeting_id)
-                    result = await self.db.execute(stmt)
-                    meeting = result.scalar_one_or_none()
-                    if meeting is not None:
-                        meeting.status = "failed"
-                        self.db.add(meeting)
-                        await self.db.commit()
-                except Exception:
-                    logger.exception(
-                        "Failed to mark meeting %s as failed", meeting_id
-                    )
-
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
     async def _meeting_by_call_connection(
-        self, call_connection_id: str | None
+        self, db: AsyncSession, call_connection_id: str | None
     ) -> Meeting | None:
         """Look up a meeting by its ACS call connection ID."""
         if not call_connection_id:
@@ -563,5 +593,5 @@ class ACSCallService:
         stmt = select(Meeting).where(
             Meeting.acs_call_connection_id == call_connection_id
         )
-        result = await self.db.execute(stmt)
+        result = await db.execute(stmt)
         return result.scalar_one_or_none()
