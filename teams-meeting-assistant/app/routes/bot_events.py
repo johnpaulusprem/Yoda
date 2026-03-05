@@ -9,8 +9,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
@@ -29,10 +28,11 @@ _VALID_TRANSITIONS: dict[str, set[str]] = {
     "scheduled": {"joining", "in_progress", "failed", "cancelled"},
     "joining": {"in_progress", "error", "failed"},
     "in_progress": {"completed", "error"},
-    "completed": set(),  # terminal
+    "completed": {"processing_failed"},  # allow post-processing failure
     "failed": set(),  # terminal
     "error": {"in_progress"},  # allow recovery
     "cancelled": set(),  # terminal
+    "processing_failed": set(),  # terminal — needs manual reprocessing
 }
 
 
@@ -52,7 +52,8 @@ async def ingest_transcript(
 ) -> dict:
     """Receive batched transcript segments from the C# Media Bot.
 
-    Uses INSERT ... ON CONFLICT DO NOTHING to deduplicate retransmitted batches.
+    Uses savepoints with IntegrityError catch to deduplicate retransmitted
+    batches (works with both PostgreSQL and SQLite).
     """
     settings = _get_settings(request)
     await validate_hmac(request, settings)
@@ -65,22 +66,26 @@ async def ingest_transcript(
             if not seg.is_final:
                 continue
 
-            # Use PostgreSQL upsert to skip duplicates on (meeting_id, sequence_number)
-            stmt = pg_insert(TranscriptSegment).values(
-                meeting_id=meeting_uuid,
-                speaker_name=seg.speaker_name,
-                speaker_id=seg.speaker_id or None,
-                text=seg.text,
-                start_time=seg.start_time_sec,
-                end_time=seg.end_time_sec,
-                confidence=seg.confidence,
-                sequence_number=seg.sequence,
-            ).on_conflict_do_nothing(
-                constraint="uq_transcript_meeting_seq",
-            )
-            result = await db.execute(stmt)
-            if result.rowcount > 0:
+            # Use savepoint per segment to skip duplicates (works with both
+            # PostgreSQL and SQLite — UniqueConstraint on meeting_id + sequence_number).
+            try:
+                async with db.begin_nested():
+                    db.add(
+                        TranscriptSegment(
+                            meeting_id=meeting_uuid,
+                            speaker_name=seg.speaker_name,
+                            speaker_id=seg.speaker_id or None,
+                            text=seg.text,
+                            start_time=seg.start_time_sec,
+                            end_time=seg.end_time_sec,
+                            confidence=seg.confidence,
+                            sequence_number=seg.sequence,
+                        )
+                    )
                 count += 1
+            except IntegrityError:
+                # Duplicate (meeting_id, sequence_number) — skip silently
+                pass
 
         if count > 0:
             await db.commit()
@@ -243,7 +248,7 @@ async def _post_process_with_retry(acs_service: object, meeting_id: uuid.UUID) -
                             select(Meeting).where(Meeting.id == meeting_id)
                         )
                         m = result.scalar_one_or_none()
-                        if m and m.status == "completed":
+                        if m and _can_transition(m.status, "processing_failed"):
                             m.status = "processing_failed"
                             await db.commit()
                 except Exception:

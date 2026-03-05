@@ -53,7 +53,10 @@ async def lifespan(app: FastAPI):
     scheduler = AsyncIOScheduler()
 
     # Shared BotCommander — reuses connections across scheduled bot joins
+    from app.services.bot_commander import set_shared_bot_commander
+
     bot_commander = BotCommander(settings=settings)
+    set_shared_bot_commander(bot_commander)
 
     # Store services on app.state for dependency injection
     app.state.settings = settings
@@ -122,6 +125,7 @@ async def lifespan(app: FastAPI):
 
         # Shutdown
         scheduler.shutdown(wait=False)
+        set_shared_bot_commander(None)
         await bot_commander.close()
         await graph_client.close()
         await engine.dispose()

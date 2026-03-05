@@ -265,7 +265,7 @@ public class BotService : IHostedService
         out CallHandler callHandler)
     {
         // Parse the Teams meeting join URL into chatInfo + meetingInfo
-        var joinInfo = JoinInfo.ParseJoinURL(request.JoinUrl);
+        var (chatInfo, meetingInfo, tenantId) = TeamsJoinUrlParser.Parse(request.JoinUrl);
 
         // Create media session: receive-only audio (16kHz PCM mono)
         var mediaSession = _commsClient!.CreateMediaSession(
@@ -293,9 +293,9 @@ public class BotService : IHostedService
         // Place the call to join the meeting
         var call = await _commsClient.Calls().AddAsync(new Call
         {
-            ChatInfo = joinInfo.ChatInfo,
-            MeetingInfo = joinInfo.MeetingInfo,
-            TenantId = joinInfo.TenantId,
+            ChatInfo = chatInfo,
+            MeetingInfo = meetingInfo,
+            TenantId = tenantId,
             MediaConfig = new AppHostedMediaConfig
             {
                 Blob = mediaSession.GetSerializableContent(),

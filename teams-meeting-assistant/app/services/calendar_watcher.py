@@ -562,19 +562,14 @@ async def _execute_bot_join(meeting_id: str) -> None:
             )
             return
 
-        # Use shared BotCommander from app.state, fall back to ephemeral
-        bot: BotCommander | None = None
-        owns_bot = False
-        try:
-            from app.main import app
+        # Use shared BotCommander from registry, fall back to ephemeral
+        from app.services.bot_commander import BotCommander, get_shared_bot_commander
 
-            bot = getattr(app.state, "bot_commander", None)
-        except Exception:
-            pass
+        bot: BotCommander | None = get_shared_bot_commander()
+        owns_bot = False
 
         if bot is None:
             from app.config import Settings
-            from app.services.bot_commander import BotCommander
 
             bot = BotCommander(settings=Settings())
             owns_bot = True

@@ -23,6 +23,20 @@ from app.config import Settings
 
 logger = logging.getLogger(__name__)
 
+# Module-level registry for the shared BotCommander instance.
+# Set by main.py lifespan, read by calendar_watcher._execute_bot_join.
+# Avoids circular import of app.main.
+_shared_instance: BotCommander | None = None
+
+
+def set_shared_bot_commander(instance: BotCommander | None) -> None:
+    global _shared_instance
+    _shared_instance = instance
+
+
+def get_shared_bot_commander() -> BotCommander | None:
+    return _shared_instance
+
 
 class BotCommander:
     """Sends join/leave commands to the C# Media Bot via REST.
