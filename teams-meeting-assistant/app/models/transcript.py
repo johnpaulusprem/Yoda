@@ -4,11 +4,16 @@ from sqlalchemy import Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from sqlalchemy import UniqueConstraint
+
 from app.models.base import Base, TimestampMixin
 
 
 class TranscriptSegment(Base, TimestampMixin):
     __tablename__ = "transcript_segments"
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "sequence_number", name="uq_transcript_meeting_seq"),
+    )
 
     meeting_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("meetings.id"), nullable=False

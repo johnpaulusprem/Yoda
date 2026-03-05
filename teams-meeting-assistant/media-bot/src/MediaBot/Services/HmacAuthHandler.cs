@@ -55,12 +55,16 @@ public class HmacAuthHandler : DelegatingHandler
             ?? Guid.NewGuid().ToString();
         request.Headers.Add("X-Correlation-Id", correlationId);
 
-        // Re-create content since we consumed the stream, preserving all headers
+        // Re-create content since we consumed the stream, preserving all headers.
+        // IMPORTANT: ByteArrayContent defaults to application/octet-stream, so we must
+        // clear it before restoring original headers (TryAddWithoutValidation won't
+        // override an existing Content-Type).
         if (bodyBytes.Length > 0)
         {
             var originalHeaders = request.Content?.Headers.ToList()
                 ?? new List<KeyValuePair<string, IEnumerable<string>>>();
             request.Content = new ByteArrayContent(bodyBytes);
+            request.Content.Headers.ContentType = null; // Clear default octet-stream
             foreach (var header in originalHeaders)
             {
                 request.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);

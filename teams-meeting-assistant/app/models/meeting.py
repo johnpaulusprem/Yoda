@@ -32,7 +32,7 @@ class Meeting(Base, TimestampMixin):
     )
     status: Mapped[str] = mapped_column(
         String, nullable=False, default="scheduled"
-    )  # scheduled, in_progress, completed, failed, cancelled
+    )  # scheduled, joining, in_progress, completed, failed, error, processing_failed, cancelled
     acs_call_connection_id: Mapped[str | None] = mapped_column(
         String, nullable=True
     )  # ACS call connection ID once joined

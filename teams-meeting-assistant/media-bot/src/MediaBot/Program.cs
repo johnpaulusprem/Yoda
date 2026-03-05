@@ -26,6 +26,9 @@ builder.Services.AddHttpLogging(opts =>
         | Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.Duration;
 });
 
+// Authentication provider (MSAL — singleton for token caching)
+builder.Services.AddSingleton<AuthenticationProvider>();
+
 // HMAC validation filter (scoped — used by MeetingsController)
 builder.Services.AddScoped<HmacValidationFilter>();
 

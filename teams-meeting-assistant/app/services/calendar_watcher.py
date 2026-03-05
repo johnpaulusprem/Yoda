@@ -539,10 +539,11 @@ async def _execute_bot_join(meeting_id: str) -> None:
     This is a standalone async function (not a method) so APScheduler can
     serialize / invoke it.  It creates a fresh DB session to avoid stale
     session issues from the long-lived scheduler.
+
+    Uses the shared BotCommander from app.state (set up in lifespan) to
+    reuse HTTP connections. Falls back to creating a new one if unavailable.
     """
-    from app.config import Settings
     from app.dependencies import async_session_factory
-    from app.services.bot_commander import BotCommander
 
     logger.info("Executing scheduled bot join", extra={"meeting_id": meeting_id})
 
@@ -561,8 +562,22 @@ async def _execute_bot_join(meeting_id: str) -> None:
             )
             return
 
-        settings = Settings()
-        bot = BotCommander(settings=settings)
+        # Use shared BotCommander from app.state, fall back to ephemeral
+        bot: BotCommander | None = None
+        owns_bot = False
+        try:
+            from app.main import app
+
+            bot = getattr(app.state, "bot_commander", None)
+        except Exception:
+            pass
+
+        if bot is None:
+            from app.config import Settings
+            from app.services.bot_commander import BotCommander
+
+            bot = BotCommander(settings=Settings())
+            owns_bot = True
 
         try:
             call_id = await bot.join_meeting(
@@ -585,4 +600,5 @@ async def _execute_bot_join(meeting_id: str) -> None:
             meeting.status = "failed"
             await db.commit()
         finally:
-            await bot.close()
+            if owns_bot and bot is not None:
+                await bot.close()

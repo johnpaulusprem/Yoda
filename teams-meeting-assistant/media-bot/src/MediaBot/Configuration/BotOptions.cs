@@ -9,4 +9,5 @@ public class BotOptions
     public string BotBaseUrl { get; set; } = "";
     public string MediaPlatformInstancePublicIp { get; set; } = "";
     public int MediaPlatformInstanceInternalPort { get; set; } = 8445;
+    public string? CertificateThumbprint { get; set; }
 }

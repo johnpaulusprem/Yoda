@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
 
     from app.services.acs_call_service import ACSCallService
     from app.services.ai_processor import AIProcessor
+    from app.services.bot_commander import BotCommander
     from app.services.calendar_watcher import CalendarWatcher
     from app.services.delivery import DeliveryService
     from app.services.graph_client import GraphClient
@@ -51,11 +52,15 @@ async def lifespan(app: FastAPI):
 
     scheduler = AsyncIOScheduler()
 
+    # Shared BotCommander — reuses connections across scheduled bot joins
+    bot_commander = BotCommander(settings=settings)
+
     # Store services on app.state for dependency injection
     app.state.settings = settings
     app.state.token_provider = token_provider
     app.state.graph_client = graph_client
     app.state.scheduler = scheduler
+    app.state.bot_commander = bot_commander
 
     async with async_session_factory() as db:
         acs_service = ACSCallService(settings=settings, db=db)
@@ -117,6 +122,7 @@ async def lifespan(app: FastAPI):
 
         # Shutdown
         scheduler.shutdown(wait=False)
+        await bot_commander.close()
         await graph_client.close()
         await engine.dispose()
         logger.info("Teams Meeting Assistant shut down")

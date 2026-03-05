@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +23,22 @@ from app.utils.hmac_auth import validate_hmac
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Valid status transitions — prevents race conditions where late events
+# overwrite terminal states.
+_VALID_TRANSITIONS: dict[str, set[str]] = {
+    "scheduled": {"joining", "in_progress", "failed", "cancelled"},
+    "joining": {"in_progress", "error", "failed"},
+    "in_progress": {"completed", "error"},
+    "completed": set(),  # terminal
+    "failed": set(),  # terminal
+    "error": {"in_progress"},  # allow recovery
+    "cancelled": set(),  # terminal
+}
+
+
+def _can_transition(current: str, target: str) -> bool:
+    return target in _VALID_TRANSITIONS.get(current, set())
+
 
 def _get_settings(request: Request) -> Settings:
     return request.app.state.settings
@@ -33,7 +50,10 @@ async def ingest_transcript(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Receive batched transcript segments from the C# Media Bot."""
+    """Receive batched transcript segments from the C# Media Bot.
+
+    Uses INSERT ... ON CONFLICT DO NOTHING to deduplicate retransmitted batches.
+    """
     settings = _get_settings(request)
     await validate_hmac(request, settings)
 
@@ -44,7 +64,9 @@ async def ingest_transcript(
         for seg in payload.segments:
             if not seg.is_final:
                 continue
-            segment = TranscriptSegment(
+
+            # Use PostgreSQL upsert to skip duplicates on (meeting_id, sequence_number)
+            stmt = pg_insert(TranscriptSegment).values(
                 meeting_id=meeting_uuid,
                 speaker_name=seg.speaker_name,
                 speaker_id=seg.speaker_id or None,
@@ -53,9 +75,12 @@ async def ingest_transcript(
                 end_time=seg.end_time_sec,
                 confidence=seg.confidence,
                 sequence_number=seg.sequence,
+            ).on_conflict_do_nothing(
+                constraint="uq_transcript_meeting_seq",
             )
-            db.add(segment)
-            count += 1
+            result = await db.execute(stmt)
+            if result.rowcount > 0:
+                count += 1
 
         if count > 0:
             await db.commit()
@@ -124,16 +149,8 @@ async def handle_lifecycle(
             await _handle_participants_updated(db, meeting, payload)
 
         elif payload.event_type == "bot_error":
-            meeting.status = "error"
-            await db.commit()
-            logger.error(
-                "Bot error reported",
-                extra={
-                    "meeting_id": str(meeting.id),
-                    "error_data": payload.data,
-                    "bot_instance_id": payload.bot_instance_id,
-                },
-            )
+            await _handle_bot_error(db, meeting, payload)
+
     except SQLAlchemyError:
         logger.exception(
             "Database error handling lifecycle event",
@@ -150,10 +167,16 @@ async def handle_lifecycle(
 
 async def _handle_bot_joined(db: AsyncSession, meeting: Meeting) -> None:
     """Mark meeting as in_progress when bot joins."""
-    if meeting.status != "in_progress":
-        meeting.status = "in_progress"
-        meeting.actual_start = meeting.actual_start or datetime.now(timezone.utc)
-        await db.commit()
+    if not _can_transition(meeting.status, "in_progress"):
+        logger.warning(
+            "Ignoring bot_joined: invalid transition from %s to in_progress",
+            meeting.status,
+            extra={"meeting_id": str(meeting.id)},
+        )
+        return
+    meeting.status = "in_progress"
+    meeting.actual_start = meeting.actual_start or datetime.now(timezone.utc)
+    await db.commit()
     logger.info(
         "Bot joined meeting",
         extra={"meeting_id": str(meeting.id), "status": meeting.status},
@@ -164,6 +187,14 @@ async def _handle_meeting_ended(
     db: AsyncSession, meeting: Meeting, request: Request
 ) -> None:
     """Mark meeting completed and trigger post-processing pipeline."""
+    if not _can_transition(meeting.status, "completed"):
+        logger.warning(
+            "Ignoring meeting_ended: invalid transition from %s to completed",
+            meeting.status,
+            extra={"meeting_id": str(meeting.id)},
+        )
+        return
+
     meeting.status = "completed"
     meeting.actual_end = datetime.now(timezone.utc)
     await db.commit()
@@ -172,10 +203,15 @@ async def _handle_meeting_ended(
     acs_service = getattr(request.app.state, "acs_service", None)
     if acs_service and hasattr(acs_service, "_run_post_processing"):
         task = asyncio.create_task(
-            acs_service._run_post_processing(meeting.id),
+            _post_process_with_retry(acs_service, meeting.id),
             name=f"post_processing_{meeting.id}",
         )
         task.add_done_callback(_log_task_exception)
+    else:
+        logger.warning(
+            "Post-processing not available — acs_service not configured",
+            extra={"meeting_id": str(meeting.id)},
+        )
 
     logger.info(
         "Meeting ended, post-processing triggered",
@@ -183,12 +219,89 @@ async def _handle_meeting_ended(
     )
 
 
+async def _post_process_with_retry(acs_service: object, meeting_id: uuid.UUID) -> None:
+    """Run post-processing with retry. On final failure, mark meeting as needing reprocessing."""
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        try:
+            await acs_service._run_post_processing(meeting_id)  # type: ignore[attr-defined]
+            return
+        except Exception:
+            if attempt == max_retries:
+                logger.error(
+                    "Post-processing failed after %d attempts for meeting %s — "
+                    "meeting needs manual reprocessing",
+                    max_retries + 1,
+                    meeting_id,
+                )
+                # Update meeting status to indicate processing failed
+                from app.dependencies import async_session_factory
+
+                try:
+                    async with async_session_factory() as db:
+                        result = await db.execute(
+                            select(Meeting).where(Meeting.id == meeting_id)
+                        )
+                        m = result.scalar_one_or_none()
+                        if m and m.status == "completed":
+                            m.status = "processing_failed"
+                            await db.commit()
+                except Exception:
+                    logger.exception(
+                        "Failed to update meeting status to processing_failed"
+                    )
+                raise
+            logger.warning(
+                "Post-processing attempt %d failed for meeting %s, retrying...",
+                attempt + 1,
+                meeting_id,
+                exc_info=True,
+            )
+            await asyncio.sleep(5 * (attempt + 1))
+
+
+async def _handle_bot_error(
+    db: AsyncSession, meeting: Meeting, payload: BotLifecycleEventIn
+) -> None:
+    """Handle bot error — only transition if status allows it."""
+    if not _can_transition(meeting.status, "error"):
+        logger.warning(
+            "Ignoring bot_error: invalid transition from %s to error",
+            meeting.status,
+            extra={"meeting_id": str(meeting.id)},
+        )
+        return
+
+    meeting.status = "error"
+    await db.commit()
+    logger.error(
+        "Bot error reported",
+        extra={
+            "meeting_id": str(meeting.id),
+            "error_data": payload.data,
+            "bot_instance_id": payload.bot_instance_id,
+        },
+    )
+
+
 async def _handle_participants_updated(
     db: AsyncSession, meeting: Meeting, payload: BotLifecycleEventIn
 ) -> None:
     """Add new participants to the meeting (batch query, no N+1)."""
-    participants = (payload.data or {}).get("participants", [])
+    raw_participants = (payload.data or {}).get("participants", [])
     now = datetime.now(timezone.utc)
+
+    # Validate participant entries — skip malformed ones instead of crashing
+    participants: list[dict] = []
+    for p in raw_participants:
+        if not isinstance(p, dict):
+            logger.warning(
+                "Skipping malformed participant entry: %s",
+                type(p).__name__,
+                extra={"meeting_id": str(meeting.id)},
+            )
+            continue
+        participants.append(p)
 
     # Single query to get all existing participant user_ids for this meeting
     existing_result = await db.execute(
@@ -201,13 +314,18 @@ async def _handle_participants_updated(
     added = 0
     for p in participants:
         user_id = p.get("id", "")
-        if not user_id or user_id in existing_ids:
+        if not isinstance(user_id, str) or not user_id:
             continue
+        if user_id in existing_ids:
+            continue
+        display_name = p.get("displayName", "Unknown")
+        if not isinstance(display_name, str):
+            display_name = "Unknown"
         db.add(
             MeetingParticipant(
                 meeting_id=meeting.id,
                 user_id=user_id,
-                display_name=p.get("displayName", "Unknown"),
+                display_name=display_name,
                 role="attendee",
                 joined_at=now,
             )
