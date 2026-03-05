@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     NUDGE_ESCALATION_THRESHOLD: int = 2
     LONG_MEETING_THRESHOLD_MINUTES: int = 120
 
+    # Media Bot (C# service)
+    MEDIA_BOT_BASE_URL: str = "http://media-bot:8080"
+    INTER_SERVICE_HMAC_KEY: str = ""
+
     # Redis (for task queue, optional)
     REDIS_URL: str = "redis://localhost:6379/0"
 

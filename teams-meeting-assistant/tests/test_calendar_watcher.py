@@ -396,4 +396,7 @@ async def test_renew_expiring_subscriptions(
 
         # Verify the expiration was extended in the DB
         await async_session.refresh(expiring_sub)
-        assert expiring_sub.expiration > now + timedelta(hours=6)
+        exp = expiring_sub.expiration
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        assert exp > now + timedelta(hours=6)

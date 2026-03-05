@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MediaBot</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.24" />
+    <PackageReference Include="Microsoft.CognitiveServices.Speech" Version="1.42.0" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.73.1" />
+    <!-- Graph Communications SDK — Windows-only, will only restore on Windows build agents -->
+    <PackageReference Include="Microsoft.Graph.Communications.Calls" Version="1.2.0.15690" />
+    <PackageReference Include="Microsoft.Graph.Communications.Calls.Media" Version="1.2.0.15690" />
+    <PackageReference Include="Microsoft.Graph.Communications.Common" Version="1.2.0.15690" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+</Project>

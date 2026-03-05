@@ -44,6 +44,8 @@ _TEST_ENV = {
     "AI_FOUNDRY_API_KEY": "test-api-key",
     "AI_FOUNDRY_DEPLOYMENT_NAME": "gpt-4o-mini",
     "AI_FOUNDRY_DEPLOYMENT_NAME_COMPLEX": "gpt-4o",
+    "MEDIA_BOT_BASE_URL": "http://localhost:8080",
+    "INTER_SERVICE_HMAC_KEY": "test-hmac-key-for-testing",
     "REDIS_URL": "redis://localhost:6379/0",
     "DEBUG": "false",
     "NUDGE_ESCALATION_THRESHOLD": "2",
@@ -172,6 +174,7 @@ async def test_client(
         from app.routes.webhooks import router as webhooks_router
         from app.routes.acs_callbacks import router as acs_callbacks_router
         from app.routes.action_items import router as action_items_router
+        from app.routes.bot_events import router as bot_events_router
         from app.dependencies import get_db
 
         test_app = FastAPI(title="Test App")
@@ -190,8 +193,16 @@ async def test_client(
             prefix="/api/action-items",
             tags=["action-items"],
         )
+        test_app.include_router(
+            bot_events_router,
+            prefix="/api/bot-events",
+            tags=["bot-events"],
+        )
 
         # Wire up mock services on app.state
+        from app.config import Settings
+
+        test_app.state.settings = Settings()
         test_app.state.calendar_watcher = AsyncMock()
         test_app.state.acs_service = mock_acs_client
         test_app.state.graph_client = mock_graph_client

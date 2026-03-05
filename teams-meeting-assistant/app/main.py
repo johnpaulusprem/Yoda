@@ -141,6 +141,10 @@ app.include_router(acs_callbacks_router, prefix="/callbacks", tags=["acs"])
 app.include_router(meetings_router, prefix="/api/meetings", tags=["meetings"])
 app.include_router(action_items_router, prefix="/api/action-items", tags=["action-items"])
 
+from app.routes.bot_events import router as bot_events_router  # noqa: E402
+
+app.include_router(bot_events_router, prefix="/api/bot-events", tags=["bot-events"])
+
 
 @app.websocket("/ws/transcription/{meeting_id}")
 async def transcription_ws(websocket: WebSocket, meeting_id: str):

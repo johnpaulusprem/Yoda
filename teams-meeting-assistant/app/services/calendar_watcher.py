@@ -439,7 +439,10 @@ class CalendarWatcher:
         Args:
             meeting: The Meeting model instance to schedule a join for.
         """
-        join_time = meeting.scheduled_start - timedelta(
+        scheduled = meeting.scheduled_start
+        if scheduled.tzinfo is None:
+            scheduled = scheduled.replace(tzinfo=timezone.utc)
+        join_time = scheduled - timedelta(
             minutes=self.settings.BOT_JOIN_BEFORE_MINUTES
         )
 
@@ -531,13 +534,15 @@ def _extract_thread_id(join_url: str) -> str:
 
 
 async def _execute_bot_join(meeting_id: str) -> None:
-    """APScheduler job function that joins a meeting via ACS.
+    """APScheduler job — tells the C# Media Bot to join a meeting.
 
     This is a standalone async function (not a method) so APScheduler can
     serialize / invoke it.  It creates a fresh DB session to avoid stale
     session issues from the long-lived scheduler.
     """
+    from app.config import Settings
     from app.dependencies import async_session_factory
+    from app.services.bot_commander import BotCommander
 
     logger.info("Executing scheduled bot join", extra={"meeting_id": meeting_id})
 
@@ -556,23 +561,28 @@ async def _execute_bot_join(meeting_id: str) -> None:
             )
             return
 
-        # Import ACS service lazily to avoid circular imports
-        from app.config import Settings
-        from app.services.acs_call_service import ACSCallService
-
         settings = Settings()
-        acs_service = ACSCallService(settings=settings, db=db)
+        bot = BotCommander(settings=settings)
 
         try:
-            await acs_service.join_meeting(meeting)
+            call_id = await bot.join_meeting(
+                meeting_id=str(meeting.id),
+                join_url=meeting.join_url,
+            )
+            meeting.status = "joining"
+            meeting.acs_call_connection_id = call_id  # reuse column for bot call_id
+            await db.commit()
             logger.info(
-                "Bot successfully joined meeting",
-                extra={"meeting_id": meeting_id},
+                "Bot join requested for meeting %s, call_id=%s",
+                meeting_id,
+                call_id,
             )
         except Exception:
             logger.exception(
-                "Failed to join meeting via ACS",
-                extra={"meeting_id": meeting_id},
+                "Failed to request bot join for meeting %s",
+                meeting_id,
             )
             meeting.status = "failed"
             await db.commit()
+        finally:
+            await bot.close()
