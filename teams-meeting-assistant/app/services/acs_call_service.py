@@ -12,15 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from azure.communication.callautomation import (
-    CallAutomationClient,
-    MediaStreamingAudioChannelType,
-    MediaStreamingContentType,
-    MediaStreamingOptions,
-    MediaStreamingTransportType,
-    TranscriptionOptions,
-    TranscriptionTransportType,
-)
+from azure.communication.callautomation import CallAutomationClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -62,53 +54,74 @@ class ACSCallService:
     async def join_meeting(self, meeting: Meeting) -> str:
         """Join a Teams meeting using ACS Call Automation.
 
-        1. Build ``MediaStreamingOptions`` pointing our WebSocket audio endpoint.
-        2. Build ``TranscriptionOptions`` pointing our WebSocket transcription endpoint.
-        3. Call ``create_group_call`` (or ``join_call`` via the Teams join URL).
-        4. Persist the call connection ID and update meeting status.
+        The Python SDK v1.5.0 public methods (``create_call``, ``create_group_call``,
+        ``connect_call``) do NOT support ``teamsMeetingLink``.  The only way to join
+        a Teams meeting is to call the generated client's ``create_call`` directly
+        with raw JSON bytes (``IO[bytes]``) containing the ``teamsMeetingLink`` field.
+
+        The SDK's ``TranscriptionOptions`` / ``MediaStreamingOptions`` models are also
+        incomplete — ``transportUrl``, ``transportType``, ``startTranscription`` are
+        silently dropped.  So we include them in the raw JSON payload as well.
 
         Returns the ``call_connection_id``.
         """
+        import io
+        import json as _json
+
         logger.info(
             "Joining meeting %s (%s)",
             meeting.id,
             meeting.subject,
         )
 
+        if not meeting.join_url:
+            raise ValueError(f"Meeting {meeting.id} has no join_url")
+
         # Derive WebSocket base from the public BASE_URL.
-        # BASE_URL is expected to be like "https://my-app.example.com"
-        # We need "wss://my-app.example.com" for the WebSocket URLs.
         ws_base = self.settings.BASE_URL.replace("https://", "wss://").replace(
             "http://", "ws://"
         )
 
-        media_streaming = MediaStreamingOptions(
-            transport_url=f"{ws_base}/ws/audio/{meeting.id}",
-            transport_type=MediaStreamingTransportType.WEBSOCKET,
-            content_type=MediaStreamingContentType.AUDIO,
-            audio_channel_type=MediaStreamingAudioChannelType.UNMIXED,
-        )
-
-        transcription = TranscriptionOptions(
-            transport_url=f"{ws_base}/ws/transcription/{meeting.id}",
-            transport_type=TranscriptionTransportType.WEBSOCKET,
-            locale="en-US",
-        )
-
         callback_url = f"{self.settings.BASE_URL}/callbacks/acs"
 
+        # Build raw JSON request with teamsMeetingLink — the only way to
+        # join a Teams meeting via the ACS Call Automation REST API.
+        request_body = {
+            "teamsMeetingLink": meeting.join_url,
+            "callbackUri": callback_url,
+            "sourceDisplayName": "CXO AI Companion",
+            "mediaStreamingOptions": {
+                "transportUrl": f"{ws_base}/ws/audio/{meeting.id}",
+                "transportType": "websocket",
+                "contentType": "audio",
+                "audioChannelType": "unmixed",
+            },
+            "transcriptionOptions": {
+                "transportUrl": f"{ws_base}/ws/transcription/{meeting.id}",
+                "transportType": "websocket",
+                "locale": "en-US",
+                "startTranscription": True,
+            },
+        }
+
         try:
-            # ACS Call Automation SDK -- synchronous call wrapped in a
-            # thread so we don't block the event loop.
+            # Bypass the public SDK methods and call the generated client
+            # directly with IO[bytes].  The generated create_call accepts
+            # Union[CreateCallRequest, IO[bytes]] — see _operations.py.
             call_connection_properties = await asyncio.to_thread(
-                self.client.create_group_call,
-                target_participant=meeting.join_url,
-                callback_url=callback_url,
-                media_streaming=media_streaming,
-                transcription=transcription,
+                self.client._client.create_call,
+                create_call_request=io.BytesIO(
+                    _json.dumps(request_body).encode("utf-8")
+                ),
             )
 
-            call_connection_id: str = call_connection_properties.call_connection_id
+            # The generated client returns the raw model; extract
+            # call_connection_id from either attribute or dict access.
+            if hasattr(call_connection_properties, "call_connection_id"):
+                call_connection_id: str = call_connection_properties.call_connection_id
+            else:
+                call_connection_id = call_connection_properties["callConnectionId"]
+
             logger.info(
                 "ACS call created for meeting %s, call_connection_id=%s",
                 meeting.id,
