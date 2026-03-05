@@ -53,19 +53,16 @@ async def test_join_meeting_returns_connection_id(
     async_session: AsyncSession,
     sample_meeting,
 ):
-    """join_meeting should call ACS SDK and return a call_connection_id."""
+    """join_meeting should call _create_call_with_teams_link and return a call_connection_id."""
     with patch.dict("os.environ", _TEST_ENV, clear=False):
         from app.config import Settings
         from app.services.acs_call_service import ACSCallService
 
         settings = Settings()
 
-        # Mock the CallAutomationClient
+        # Mock the return value of _create_call_with_teams_link
         mock_call_props = MagicMock()
         mock_call_props.call_connection_id = "acs-conn-returned-123"
-
-        mock_acs_sdk = MagicMock()
-        mock_acs_sdk.create_group_call = MagicMock(return_value=mock_call_props)
 
         # Reset the meeting status to scheduled so join_meeting can proceed
         sample_meeting.status = "scheduled"
@@ -74,7 +71,8 @@ async def test_join_meeting_returns_connection_id(
         await async_session.commit()
 
         service = ACSCallService(settings=settings, db=async_session)
-        service.client = mock_acs_sdk
+        service.client = MagicMock()
+        service._create_call_with_teams_link = MagicMock(return_value=mock_call_props)
 
         # Patch asyncio.to_thread to call the function synchronously
         with patch("asyncio.to_thread", new_callable=lambda: _sync_to_thread):
@@ -89,13 +87,49 @@ async def test_join_meeting_returns_connection_id(
         assert sample_meeting.actual_start is not None
 
 
-def _sync_to_thread(func, *args, **kwargs):
+async def test_join_meeting_payload_structure(
+    async_session: AsyncSession,
+    sample_meeting,
+):
+    """join_meeting should build correct payload with teamsMeetingLink."""
+    with patch.dict("os.environ", _TEST_ENV, clear=False):
+        from app.config import Settings
+        from app.services.acs_call_service import ACSCallService
+
+        settings = Settings()
+
+        mock_call_props = MagicMock()
+        mock_call_props.call_connection_id = "acs-conn-payload-test"
+
+        sample_meeting.status = "scheduled"
+        sample_meeting.acs_call_connection_id = None
+        sample_meeting.actual_start = None
+        await async_session.commit()
+
+        service = ACSCallService(settings=settings, db=async_session)
+        service.client = MagicMock()
+        service._create_call_with_teams_link = MagicMock(return_value=mock_call_props)
+
+        with patch("asyncio.to_thread", new_callable=lambda: _sync_to_thread):
+            await service.join_meeting(sample_meeting)
+
+        # Verify the payload passed to _create_call_with_teams_link
+        call_args = service._create_call_with_teams_link.call_args
+        request_body = call_args[0][0]
+
+        assert request_body["teamsMeetingLink"] == sample_meeting.join_url
+        assert "callbackUri" in request_body
+        assert request_body["callbackUri"].endswith("/callbacks/acs")
+        assert "mediaStreamingOptions" in request_body
+        assert request_body["mediaStreamingOptions"]["transportType"] == "websocket"
+        assert "transcriptionOptions" in request_body
+        assert request_body["transcriptionOptions"]["locale"] == "en-US"
+        assert request_body["transcriptionOptions"]["startTranscription"] is True
+
+
+async def _sync_to_thread(fn, *args, **kwargs):
     """Replacement for asyncio.to_thread that calls synchronously."""
-
-    async def wrapper(fn, *a, **kw):
-        return fn(*a, **kw)
-
-    return wrapper
+    return fn(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
