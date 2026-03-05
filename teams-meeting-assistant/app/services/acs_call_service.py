@@ -65,9 +65,6 @@ class ACSCallService:
 
         Returns the ``call_connection_id``.
         """
-        import io
-        import json as _json
-
         logger.info(
             "Joining meeting %s (%s)",
             meeting.id,
@@ -84,8 +81,24 @@ class ACSCallService:
 
         callback_url = f"{self.settings.BASE_URL}/callbacks/acs"
 
-        # Build raw JSON request with teamsMeetingLink — the only way to
-        # join a Teams meeting via the ACS Call Automation REST API.
+        # Build raw JSON request with teamsMeetingLink.
+        #
+        # Why we can't use the SDK's public methods:
+        #   - create_call / create_group_call expect CommunicationIdentifier
+        #     targets — they don't support teamsMeetingLink
+        #   - connect_call only supports server_call_id / group_call_id / room_id
+        #
+        # Why we can't use _client.create_call(IO[bytes]):
+        #   - The HMAC signing policy (_shared/policy.py:101) calls
+        #     body.encode("utf-8"), which requires body to be str.
+        #     BytesIO and bytes both fail with AttributeError.
+        #
+        # Why we can't pass a dict through create_call_request=:
+        #   - _serialize.body(dict, "CreateCallRequest") strips unknown
+        #     fields — teamsMeetingLink gets dropped.
+        #
+        # Solution: build the HttpRequest ourselves with json=dict (which
+        # stores body as a str) and run it through the SDK's pipeline.
         request_body = {
             "teamsMeetingLink": meeting.join_url,
             "callbackUri": callback_url,
@@ -105,23 +118,12 @@ class ACSCallService:
         }
 
         try:
-            # Bypass the public SDK methods and call the generated client
-            # directly with IO[bytes].  The generated create_call accepts
-            # Union[CreateCallRequest, IO[bytes]] — see _operations.py.
             call_connection_properties = await asyncio.to_thread(
-                self.client._client.create_call,
-                create_call_request=io.BytesIO(
-                    _json.dumps(request_body).encode("utf-8")
-                ),
+                self._create_call_with_teams_link,
+                request_body,
             )
 
-            # The generated client returns the raw model; extract
-            # call_connection_id from either attribute or dict access.
-            if hasattr(call_connection_properties, "call_connection_id"):
-                call_connection_id: str = call_connection_properties.call_connection_id
-            else:
-                call_connection_id = call_connection_properties["callConnectionId"]
-
+            call_connection_id: str = call_connection_properties.call_connection_id
             logger.info(
                 "ACS call created for meeting %s, call_connection_id=%s",
                 meeting.id,
@@ -144,6 +146,56 @@ class ACSCallService:
             self.db.add(meeting)
             await self.db.commit()
             raise
+
+    def _create_call_with_teams_link(self, request_body: dict) -> object:
+        """Send a createCall request with teamsMeetingLink via the SDK pipeline.
+
+        Constructs the HttpRequest manually with ``json=request_body`` so the
+        body is stored as a ``str`` (required by the HMAC signing policy),
+        then runs it through the SDK's HTTP pipeline and deserializes the
+        response as ``CallConnectionProperties``.
+        """
+        from azure.communication.callautomation._generated.operations._operations import (
+            build_azure_communication_call_automation_service_create_call_request,
+        )
+        from azure.core.exceptions import HttpResponseError
+
+        generated = self.client._client
+
+        _request = build_azure_communication_call_automation_service_create_call_request(
+            content_type="application/json",
+            api_version=generated._config.api_version,
+            json=request_body,
+            content=None,
+            headers={},
+            params={},
+        )
+
+        path_format_arguments = {
+            "endpoint": generated._serialize.url(
+                "self._config.endpoint",
+                generated._config.endpoint,
+                "str",
+                skip_quote=True,
+            ),
+        }
+        _request.url = generated._client.format_url(
+            _request.url, **path_format_arguments
+        )
+
+        pipeline_response = generated._client._pipeline.run(_request, stream=False)
+        response = pipeline_response.http_response
+
+        if response.status_code not in [201]:
+            from azure.communication.callautomation._generated import models as _models
+            error = generated._deserialize.failsafe_deserialize(
+                _models.CommunicationErrorResponse, pipeline_response
+            )
+            raise HttpResponseError(response=response, model=error)
+
+        return generated._deserialize(
+            "CallConnectionProperties", pipeline_response.http_response
+        )
 
     # ------------------------------------------------------------------
     # Callback event dispatcher

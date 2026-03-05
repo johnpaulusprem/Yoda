@@ -90,16 +90,15 @@ class TestACSJoinMeeting:
 
     @pytest.mark.asyncio
     async def test_join_meeting_sends_teams_meeting_link(self, session_factory):
-        """join_meeting should pass teamsMeetingLink in the raw JSON body."""
+        """join_meeting should pass teamsMeetingLink in the request body."""
         from cxo_ai_companion.services.acs_call_service import ACSCallService
 
         service = ACSCallService(MockSettings(), session_factory)
 
-        # Mock the internal generated client's create_call
+        # Mock _create_call_with_teams_link which builds and sends the request
         mock_response = MagicMock()
         mock_response.call_connection_id = "test-conn-123"
-        service.client._client = MagicMock()
-        service.client._client.create_call = MagicMock(return_value=mock_response)
+        service._create_call_with_teams_link = MagicMock(return_value=mock_response)
 
         meeting = _create_meeting_orm()
         async with session_factory() as db:
@@ -110,13 +109,9 @@ class TestACSJoinMeeting:
 
         assert call_id == "test-conn-123"
 
-        # Verify create_call was called with raw bytes
-        call_args = service.client._client.create_call.call_args
-        raw_body = call_args.kwargs.get("create_call_request") or call_args[1].get("create_call_request")
-        import io
-        assert isinstance(raw_body, io.BytesIO)
-
-        payload = json.loads(raw_body.getvalue())
+        # Verify the request body dict passed to _create_call_with_teams_link
+        payload = service._create_call_with_teams_link.call_args[0][0]
+        assert isinstance(payload, dict)
         assert payload["teamsMeetingLink"] == meeting.join_url
         assert payload["callbackUri"] == "https://test.example.com/api/callbacks/acs/events"
         assert payload["transcriptionOptions"]["startTranscription"] is True
@@ -150,8 +145,7 @@ class TestACSJoinMeeting:
 
         mock_response = MagicMock()
         mock_response.call_connection_id = "conn-456"
-        service.client._client = MagicMock()
-        service.client._client.create_call = MagicMock(return_value=mock_response)
+        service._create_call_with_teams_link = MagicMock(return_value=mock_response)
 
         meeting = _create_meeting_orm()
         async with session_factory() as db:
@@ -178,8 +172,7 @@ class TestACSJoinMeeting:
 
         service = ACSCallService(MockSettings(), session_factory)
 
-        service.client._client = MagicMock()
-        service.client._client.create_call = MagicMock(side_effect=RuntimeError("ACS down"))
+        service._create_call_with_teams_link = MagicMock(side_effect=RuntimeError("ACS down"))
 
         meeting = _create_meeting_orm()
         async with session_factory() as db:
@@ -204,8 +197,7 @@ class TestACSJoinMeeting:
 
         mock_response = MagicMock()
         mock_response.call_connection_id = "conn-ws"
-        service.client._client = MagicMock()
-        service.client._client.create_call = MagicMock(return_value=mock_response)
+        service._create_call_with_teams_link = MagicMock(return_value=mock_response)
 
         meeting = _create_meeting_orm()
         async with session_factory() as db:
@@ -214,8 +206,7 @@ class TestACSJoinMeeting:
 
         await service.join_meeting(meeting.id)
 
-        raw_body = service.client._client.create_call.call_args.kwargs["create_call_request"]
-        payload = json.loads(raw_body.getvalue())
+        payload = service._create_call_with_teams_link.call_args[0][0]
         assert payload["transcriptionOptions"]["transportUrl"].startswith("wss://")
         assert payload["mediaStreamingOptions"]["transportUrl"].startswith("wss://")
 
@@ -250,8 +241,7 @@ class TestCallbackURL:
 
         mock_response = MagicMock()
         mock_response.call_connection_id = "conn-789"
-        service.client._client = MagicMock()
-        service.client._client.create_call = MagicMock(return_value=mock_response)
+        service._create_call_with_teams_link = MagicMock(return_value=mock_response)
 
         meeting = _create_meeting_orm()
         async with session_factory() as db:
@@ -260,8 +250,7 @@ class TestCallbackURL:
 
         await service.join_meeting(meeting.id)
 
-        raw_body = service.client._client.create_call.call_args.kwargs["create_call_request"]
-        payload = json.loads(raw_body.getvalue())
+        payload = service._create_call_with_teams_link.call_args[0][0]
         assert payload["callbackUri"].endswith("/api/callbacks/acs/events")
 
 
@@ -458,18 +447,19 @@ class TestExecuteBotJoin:
             patch("cxo_ai_companion.dependencies.get_settings", return_value=MockSettings()),
             patch("cxo_ai_companion.dependencies.get_session_factory", return_value=session_factory),
             patch("cxo_ai_companion.services.acs_call_service.CallAutomationClient") as mock_client_cls,
+            patch("cxo_ai_companion.services.acs_call_service.ACSCallService._create_call_with_teams_link") as mock_create,
         ):
             mock_client = MagicMock()
             mock_response = MagicMock()
             mock_response.call_connection_id = "sched-conn-001"
-            mock_client._client.create_call = MagicMock(return_value=mock_response)
+            mock_create.return_value = mock_response
             mock_client_cls.from_connection_string.return_value = mock_client
 
             from cxo_ai_companion.services.calendar_watcher import _execute_bot_join
 
             await _execute_bot_join(str(meeting_id))
 
-            mock_client._client.create_call.assert_called_once()
+            mock_create.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execute_bot_join_skips_non_scheduled(self, async_engine, session_factory):
@@ -496,6 +486,7 @@ class TestExecuteBotJoin:
             patch("cxo_ai_companion.dependencies.get_settings", return_value=MockSettings()),
             patch("cxo_ai_companion.dependencies.get_session_factory", return_value=session_factory),
             patch("cxo_ai_companion.services.acs_call_service.CallAutomationClient") as mock_client_cls,
+            patch("cxo_ai_companion.services.acs_call_service.ACSCallService._create_call_with_teams_link") as mock_create,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_connection_string.return_value = mock_client
@@ -505,8 +496,8 @@ class TestExecuteBotJoin:
             # Should not raise or attempt to join
             await _execute_bot_join(str(meeting_id))
 
-            # create_call should NOT have been called (meeting is in_progress)
-            mock_client._client.create_call.assert_not_called()
+            # _create_call_with_teams_link should NOT have been called (meeting is in_progress)
+            mock_create.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_execute_bot_join_invalid_meeting_id(self):
