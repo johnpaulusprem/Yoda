@@ -540,17 +540,20 @@ async def _execute_bot_join(meeting_id: str) -> None:
     serialize / invoke it.  It creates a fresh DB session to avoid stale
     session issues from the long-lived scheduler.
 
-    Uses the shared BotCommander from app.state (set up in lifespan) to
+    Uses the shared BotCommander from registry (set up in lifespan) to
     reuse HTTP connections. Falls back to creating a new one if unavailable.
     """
+    import uuid as _uuid
+
     from app.dependencies import async_session_factory
 
     logger.info("Executing scheduled bot join", extra={"meeting_id": meeting_id})
 
+    meeting_uuid = _uuid.UUID(meeting_id)
     async with async_session_factory() as db:
         result = await db.execute(
             select(Meeting).where(
-                Meeting.id == meeting_id,
+                Meeting.id == meeting_uuid,
                 Meeting.status == "scheduled",
             )
         )
