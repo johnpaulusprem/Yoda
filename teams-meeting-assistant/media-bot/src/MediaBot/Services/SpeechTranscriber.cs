@@ -157,6 +157,19 @@ public class SpeechTranscriber : IDisposable
         _logger.LogWarning(
             "Speech recognition canceled for {MeetingId}: {Reason} {Details}",
             _meetingId, e.Reason, e.ErrorDetails);
+
+        // Notify Python backend about speech errors so the meeting doesn't
+        // appear healthy when transcription is actually broken.
+        if (e.Reason == CancellationReason.Error)
+        {
+            _ = _backend.SendLifecycleEventAsync(new BotLifecycleEvent(
+                _meetingId, _botInstanceId, "bot_error", DateTimeOffset.UtcNow,
+                new Dictionary<string, object>
+                {
+                    ["error"] = $"Speech recognition error: {e.ErrorDetails}",
+                    ["error_code"] = e.ErrorCode.ToString(),
+                }));
+        }
     }
 
     /// <summary>

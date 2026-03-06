@@ -36,6 +36,7 @@ async def lifespan(app: FastAPI):
     from app.services.acs_call_service import ACSCallService
     from app.services.ai_processor import AIProcessor
     from app.services.bot_commander import BotCommander
+    from app.services.post_processing import PostProcessingService
     from app.services.calendar_watcher import CalendarWatcher
     from app.services.delivery import DeliveryService
     from app.services.graph_client import GraphClient
@@ -69,9 +70,6 @@ async def lifespan(app: FastAPI):
     subscription_task: asyncio.Task[None] | None = None
 
     async with async_session_factory() as db:
-        acs_service = ACSCallService(settings=settings, db=db)
-        app.state.acs_service = acs_service
-
         ai_processor = AIProcessor(settings=settings)
         app.state.ai_processor = ai_processor
 
@@ -83,10 +81,17 @@ async def lifespan(app: FastAPI):
         )
         app.state.delivery_service = delivery_service
 
-        # Wire downstream services into ACS service for post-meeting pipeline
-        acs_service.ai_processor = ai_processor
-        acs_service.owner_resolver = owner_resolver
-        acs_service.delivery_service = delivery_service
+        # Post-processing pipeline (AI summary, owner resolution, delivery)
+        post_processing = PostProcessingService(db=db)
+        post_processing.ai_processor = ai_processor
+        post_processing.owner_resolver = owner_resolver
+        post_processing.delivery_service = delivery_service
+        app.state.post_processing = post_processing
+
+        # ACS event handler (receives CloudEvent callbacks — does NOT make calls)
+        acs_service = ACSCallService(db=db)
+        acs_service.post_processing = post_processing
+        app.state.acs_service = acs_service
 
         calendar_watcher = CalendarWatcher(
             graph_client=graph_client,

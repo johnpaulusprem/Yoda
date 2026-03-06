@@ -24,6 +24,7 @@ public class CallHandler : IDisposable
     private readonly string _botInstanceId;
     private readonly ILogger<CallHandler> _logger;
     private bool _disposed;
+    private int _audioErrorCount;
 
     // Participant tracking — maps media stream ID (MSI) to participant identity.
     // The Graph Communications SDK provides MSI in audio frames; we map that to
@@ -75,8 +76,7 @@ public class CallHandler : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex,
-                "Error processing audio frame for meeting {MeetingId}", _meetingId);
+            HandleAudioError(ex);
         }
     }
 
@@ -103,8 +103,27 @@ public class CallHandler : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex,
-                "Error processing audio frame for meeting {MeetingId}", _meetingId);
+            HandleAudioError(ex);
+        }
+    }
+
+    private void HandleAudioError(Exception ex)
+    {
+        var count = Interlocked.Increment(ref _audioErrorCount);
+        _logger.LogError(ex,
+            "Error processing audio frame for meeting {MeetingId} (consecutive: {Count})",
+            _meetingId, count);
+
+        // After 50 consecutive errors, notify Python backend so the meeting
+        // doesn't appear healthy when transcription is actually broken.
+        if (count == 50)
+        {
+            _ = _backend.SendLifecycleEventAsync(new BotLifecycleEvent(
+                _meetingId, _botInstanceId, "bot_error", DateTimeOffset.UtcNow,
+                new Dictionary<string, object>
+                {
+                    ["error"] = $"Audio processing failed after {count} consecutive errors: {ex.Message}",
+                }));
         }
     }
 

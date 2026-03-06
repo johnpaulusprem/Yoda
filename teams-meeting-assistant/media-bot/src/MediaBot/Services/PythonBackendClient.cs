@@ -21,53 +21,59 @@ public class PythonBackendClient
 
     public async Task SendTranscriptAsync(TranscriptChunk chunk, CancellationToken ct = default)
     {
-        try
+        var json = JsonSerializer.Serialize(chunk);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("/api/bot-events/transcript", content, ct);
+        if (!response.IsSuccessStatusCode)
         {
-            var json = JsonSerializer.Serialize(chunk);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var response = await _http.PostAsync("/api/bot-events/transcript", content, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                var body = await response.Content.ReadAsStringAsync(ct);
-                _logger.LogError(
-                    "Failed to send transcript for {MeetingId}: {Status} {Body}",
-                    chunk.MeetingId, response.StatusCode, body);
-            }
-            else
-            {
-                _logger.LogDebug(
-                    "Sent {Count} transcript segments for {MeetingId}",
-                    chunk.Segments.Count, chunk.MeetingId);
-            }
+            var body = await response.Content.ReadAsStringAsync(ct);
+            _logger.LogError(
+                "Failed to send transcript for {MeetingId}: {Status} {Body}",
+                chunk.MeetingId, response.StatusCode, body);
+            // Throw so SpeechTranscriber re-buffers the segments for retry
+            response.EnsureSuccessStatusCode();
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error sending transcript for {MeetingId}", chunk.MeetingId);
-            throw;
-        }
+
+        _logger.LogDebug(
+            "Sent {Count} transcript segments for {MeetingId}",
+            chunk.Segments.Count, chunk.MeetingId);
     }
 
+    /// <summary>
+    /// Send a lifecycle event with retry. Critical events (bot_joined, meeting_ended)
+    /// must reach the Python backend or the meeting state machine gets stuck.
+    /// </summary>
     public async Task SendLifecycleEventAsync(BotLifecycleEvent evt, CancellationToken ct = default)
     {
-        try
+        const int maxRetries = 3;
+        for (var attempt = 0; attempt <= maxRetries; attempt++)
         {
-            var json = JsonSerializer.Serialize(evt);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var response = await _http.PostAsync("/api/bot-events/lifecycle", content, ct);
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                var body = await response.Content.ReadAsStringAsync(ct);
-                _logger.LogError(
-                    "Failed to send lifecycle event {EventType} for {MeetingId}: {Status} {Body}",
-                    evt.EventType, evt.MeetingId, response.StatusCode, body);
+                var json = JsonSerializer.Serialize(evt);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await _http.PostAsync("/api/bot-events/lifecycle", content, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync(ct);
+                    _logger.LogError(
+                        "Failed to send lifecycle event {EventType} for {MeetingId}: {Status} {Body}",
+                        evt.EventType, evt.MeetingId, response.StatusCode, body);
+                    response.EnsureSuccessStatusCode();
+                }
+
+                _logger.LogDebug(
+                    "Sent lifecycle event {EventType} for {MeetingId}",
+                    evt.EventType, evt.MeetingId);
+                return;
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Error sending lifecycle event {EventType} for {MeetingId}",
-                evt.EventType, evt.MeetingId);
-            throw;
+            catch (Exception ex) when (attempt < maxRetries)
+            {
+                _logger.LogWarning(ex,
+                    "Lifecycle event {EventType} for {MeetingId} failed (attempt {Attempt}/{MaxRetries}), retrying...",
+                    evt.EventType, evt.MeetingId, attempt + 1, maxRetries);
+                await Task.Delay(TimeSpan.FromSeconds(2 * (attempt + 1)), ct);
+            }
         }
     }
 }

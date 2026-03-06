@@ -203,7 +203,7 @@ async def join_meeting(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Trigger the bot to join a Teams meeting via ACS Call Automation.
+    """Trigger the C# Media Bot to join a Teams meeting.
 
     Called by the React app when a user clicks "Join" or automatically
     by the calendar watcher before a meeting starts.
@@ -231,20 +231,42 @@ async def join_meeting(
             "Only scheduled or failed meetings can be joined.",
         )
 
-    acs_service = request.app.state.acs_service
+    from app.services.bot_commander import get_shared_bot_commander, BotCommander
+
+    bot = get_shared_bot_commander()
+    owns_bot = False
+
+    if bot is None:
+        from app.config import Settings
+        bot = BotCommander(settings=Settings())
+        owns_bot = True
+
     try:
-        call_connection_id = await acs_service.join_meeting(meeting)
+        call_id = await bot.join_meeting(
+            meeting_id=str(meeting.id),
+            join_url=meeting.join_url,
+        )
+        meeting.status = "joining"
+        meeting.acs_call_connection_id = call_id
+        db.add(meeting)
+        await db.commit()
     except Exception as exc:
-        logger.exception("Failed to join meeting %s", meeting_id)
+        logger.exception("Failed to join meeting %s via Media Bot", meeting_id)
+        meeting.status = "failed"
+        db.add(meeting)
+        await db.commit()
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to join meeting via ACS: {exc}",
+            detail=f"Failed to join meeting via Media Bot: {exc}",
         ) from exc
+    finally:
+        if owns_bot:
+            await bot.close()
 
     return {
-        "status": "joined",
+        "status": "joining",
         "meeting_id": str(meeting_id),
-        "call_connection_id": call_connection_id,
+        "call_id": call_id,
     }
 
 
@@ -256,7 +278,7 @@ async def leave_meeting(
 ) -> dict:
     """Remove the bot from an active Teams meeting.
 
-    The meeting must be in 'in_progress' status with a valid ACS call connection.
+    The meeting must be in 'in_progress' status with a valid call connection.
     """
     query = select(Meeting).where(Meeting.id == meeting_id)
     result = await db.execute(query)
@@ -275,18 +297,30 @@ async def leave_meeting(
     if not meeting.acs_call_connection_id:
         raise HTTPException(
             status_code=400,
-            detail="Meeting has no active ACS call connection.",
+            detail="Meeting has no active call connection.",
         )
 
-    acs_service = request.app.state.acs_service
+    from app.services.bot_commander import get_shared_bot_commander, BotCommander
+
+    bot = get_shared_bot_commander()
+    owns_bot = False
+
+    if bot is None:
+        from app.config import Settings
+        bot = BotCommander(settings=Settings())
+        owns_bot = True
+
     try:
-        await acs_service.leave_meeting(meeting.acs_call_connection_id)
+        await bot.leave_meeting(meeting.acs_call_connection_id)
     except Exception as exc:
-        logger.exception("Failed to leave meeting %s", meeting_id)
+        logger.exception("Failed to leave meeting %s via Media Bot", meeting_id)
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to leave meeting via ACS: {exc}",
+            detail=f"Failed to leave meeting via Media Bot: {exc}",
         ) from exc
+    finally:
+        if owns_bot:
+            await bot.close()
 
     return {
         "status": "left",

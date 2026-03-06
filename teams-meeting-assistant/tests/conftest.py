@@ -135,14 +135,18 @@ def mock_graph_client() -> AsyncMock:
 
 @pytest.fixture
 def mock_acs_client() -> AsyncMock:
-    """AsyncMock for ACSCallService with all public methods stubbed."""
+    """AsyncMock for ACSCallService (event handler only — no call-making)."""
     client = AsyncMock()
-    client.join_meeting = AsyncMock(return_value="acs-conn-test-12345")
-    client.leave_meeting = AsyncMock()
     client.handle_callback = AsyncMock()
-    client.start_transcription = AsyncMock()
-    client.stop_transcription = AsyncMock()
     return client
+
+
+@pytest.fixture
+def mock_post_processing() -> AsyncMock:
+    """AsyncMock for PostProcessingService."""
+    service = AsyncMock()
+    service.run = AsyncMock()
+    return service
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +158,7 @@ async def test_client(
     async_session: AsyncSession,
     mock_graph_client: AsyncMock,
     mock_acs_client: AsyncMock,
+    mock_post_processing: AsyncMock,
 ):
     """httpx.AsyncClient wired to the FastAPI app with mocked dependencies.
 
@@ -205,6 +210,7 @@ async def test_client(
         test_app.state.settings = Settings()
         test_app.state.calendar_watcher = AsyncMock()
         test_app.state.acs_service = mock_acs_client
+        test_app.state.post_processing = mock_post_processing
         test_app.state.graph_client = mock_graph_client
 
         # Override the DB dependency to return the test session

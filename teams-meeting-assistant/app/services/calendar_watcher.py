@@ -36,7 +36,7 @@ class CalendarWatcher:
     - Create / renew / delete Graph change notification subscriptions.
     - Process incoming webhook payloads (created / updated / deleted events).
     - Store detected Teams meetings in the database.
-    - Schedule APScheduler jobs so the ACS bot joins before each meeting.
+    - Schedule APScheduler jobs so the Media Bot joins before each meeting.
     """
 
     def __init__(
@@ -424,7 +424,7 @@ class CalendarWatcher:
     # ------------------------------------------------------------------
 
     async def schedule_bot_join(self, meeting: Meeting) -> None:
-        """Schedule the ACS bot to join the meeting before its start time.
+        """Schedule the Media Bot to join the meeting before its start time.
 
         Uses APScheduler to add a one-time ``date`` trigger job that fires
         ``BOT_JOIN_BEFORE_MINUTES`` minutes before ``meeting.scheduled_start``.
@@ -432,9 +432,9 @@ class CalendarWatcher:
         If the join time is already in the past (meeting is about to start
         or has started), the job is scheduled to run immediately.
 
-        The scheduled job invokes ``acs_call_service.join_meeting`` at runtime
-        by importing it and creating a fresh DB session so it is not coupled
-        to the startup session.
+        The scheduled job invokes ``BotCommander.join_meeting`` at runtime
+        and creates a fresh DB session so it is not coupled to the startup
+        session.
 
         Args:
             meeting: The Meeting model instance to schedule a join for.

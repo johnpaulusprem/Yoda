@@ -371,20 +371,18 @@ public class BotService : IHostedService
 
         try
         {
-            info.CallHandler?.Dispose();
-            if (info.Transcriber != null)
-            {
-                await info.Transcriber.StopAsync();
-                info.Transcriber.Dispose();
-            }
-
-            // If using Graph SDK, hang up the call
+            // Hang up the Graph call FIRST — this triggers the OnCallTerminated
+            // callback which sends meeting_ended and stops the transcriber.
+            // By doing this before disposing, we avoid ObjectDisposedException
+            // in the callback and prevent duplicate meeting_ended events.
             if (_isWindows && _commsClient != null)
             {
                 try
                 {
                     var call = _commsClient.Calls()[callId];
                     await call.DeleteAsync();
+                    // Give the OnCallTerminated callback a moment to fire
+                    await Task.Delay(500);
                 }
                 catch (Exception ex)
                 {
@@ -392,13 +390,25 @@ public class BotService : IHostedService
                         "Failed to hang up Graph call {CallId} — may have already ended", callId);
                 }
             }
+            else
+            {
+                // Stub mode: no Graph SDK callback, so we handle cleanup directly
+                if (info.Transcriber != null)
+                {
+                    await info.Transcriber.StopAsync();
+                }
 
-            var backend = info.Scope.ServiceProvider.GetRequiredService<PythonBackendClient>();
-            await backend.SendLifecycleEventAsync(new BotLifecycleEvent(
-                meetingId,
-                $"media-bot-{Environment.MachineName}",
-                "meeting_ended",
-                DateTimeOffset.UtcNow));
+                var backend = info.Scope.ServiceProvider.GetRequiredService<PythonBackendClient>();
+                await backend.SendLifecycleEventAsync(new BotLifecycleEvent(
+                    meetingId,
+                    $"media-bot-{Environment.MachineName}",
+                    "meeting_ended",
+                    DateTimeOffset.UtcNow));
+            }
+
+            // Now safe to dispose — callback has already fired
+            info.CallHandler?.Dispose();
+            info.Transcriber?.Dispose();
         }
         catch (Exception ex)
         {

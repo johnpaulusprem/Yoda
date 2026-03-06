@@ -27,7 +27,8 @@ public class HmacAuthHandler : DelegatingHandler
     {
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
         var method = request.Method.Method;
-        var path = request.RequestUri?.PathAndQuery ?? "";
+        // Use AbsolutePath (no query string) to match Python's request.url.path
+        var path = request.RequestUri?.AbsolutePath ?? "";
 
         byte[] bodyBytes;
         if (request.Content != null)

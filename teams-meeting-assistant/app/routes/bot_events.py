@@ -205,16 +205,16 @@ async def _handle_meeting_ended(
     await db.commit()
 
     # Trigger post-processing as a background task with error handling
-    acs_service = getattr(request.app.state, "acs_service", None)
-    if acs_service and hasattr(acs_service, "_run_post_processing"):
+    post_processing = getattr(request.app.state, "post_processing", None)
+    if post_processing is not None:
         task = asyncio.create_task(
-            _post_process_with_retry(acs_service, meeting.id),
+            _post_process_with_retry(post_processing, meeting.id),
             name=f"post_processing_{meeting.id}",
         )
         task.add_done_callback(_log_task_exception)
     else:
         logger.warning(
-            "Post-processing not available — acs_service not configured",
+            "Post-processing not available — post_processing service not configured",
             extra={"meeting_id": str(meeting.id)},
         )
 
@@ -224,12 +224,12 @@ async def _handle_meeting_ended(
     )
 
 
-async def _post_process_with_retry(acs_service: object, meeting_id: uuid.UUID) -> None:
+async def _post_process_with_retry(post_processing: object, meeting_id: uuid.UUID) -> None:
     """Run post-processing with retry. On final failure, mark meeting as needing reprocessing."""
     max_retries = 2
     for attempt in range(max_retries + 1):
         try:
-            await acs_service._run_post_processing(meeting_id)  # type: ignore[attr-defined]
+            await post_processing.run(meeting_id)  # type: ignore[attr-defined]
             return
         except Exception:
             if attempt == max_retries:
