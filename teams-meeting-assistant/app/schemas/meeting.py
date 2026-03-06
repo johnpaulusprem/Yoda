@@ -1,11 +1,30 @@
-"""Pydantic response schemas for meetings."""
+"""Pydantic request/response schemas for meetings."""
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime
+from urllib.parse import unquote
 
 from pydantic import BaseModel, ConfigDict
+
+
+def _extract_thread_id_from_join_url(join_url: str) -> str:
+    """Extract Teams thread ID from join URL, or return a placeholder."""
+    match = re.search(r"meetup-join/([^/]+)", join_url)
+    if match:
+        return unquote(match.group(1))
+    return join_url or "test-thread"
+
+
+class CreateMeetingRequest(BaseModel):
+    """Request body for creating a test meeting (bot join testing)."""
+
+    join_url: str
+    subject: str = "Test meeting"
+    organizer_name: str = "Test Organizer"
+    organizer_email: str = "test@example.com"
 
 from app.schemas.action_item import ActionItemResponse
 from app.schemas.summary import SummaryResponse

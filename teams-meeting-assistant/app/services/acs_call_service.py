@@ -130,21 +130,24 @@ class ACSCallService:
                 call_connection_id,
             )
 
-            # Update meeting record.
+            # The meeting object may come from a different AsyncSession
+            # (for example, the route session), so merge it into the service
+            # session before persisting state changes.
             meeting.status = "in_progress"
             meeting.acs_call_connection_id = call_connection_id
             meeting.actual_start = datetime.now(timezone.utc)
-            self.db.add(meeting)
+            persisted_meeting = await self.db.merge(meeting)
             await self.db.commit()
-            await self.db.refresh(meeting)
+            await self.db.refresh(persisted_meeting)
 
             return call_connection_id
 
         except Exception:
             logger.exception("Failed to join meeting %s", meeting.id)
             meeting.status = "failed"
-            self.db.add(meeting)
+            persisted_meeting = await self.db.merge(meeting)
             await self.db.commit()
+            await self.db.refresh(persisted_meeting)
             raise
 
     def _create_call_with_teams_link(self, request_body: dict) -> object:

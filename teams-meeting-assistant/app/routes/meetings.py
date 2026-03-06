@@ -7,6 +7,8 @@ to re-trigger AI processing on an existing transcript.
 from __future__ import annotations
 
 import logging
+import uuid as uuid_mod
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -18,15 +20,59 @@ from app.dependencies import get_db
 from app.models.meeting import Meeting, MeetingParticipant
 from app.models.transcript import TranscriptSegment
 from app.schemas.meeting import (
+    CreateMeetingRequest,
     MeetingDetailResponse,
     MeetingListResponse,
     MeetingResponse,
+    _extract_thread_id_from_join_url,
 )
 from app.schemas.transcript import TranscriptResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.post("", response_model=MeetingResponse, status_code=201)
+async def create_meeting(
+    body: CreateMeetingRequest,
+    db: AsyncSession = Depends(get_db),
+) -> MeetingResponse:
+    """Create a meeting for testing bot join + transcription.
+
+    Use this to create a meeting record with a Teams join URL, then call
+    POST /api/meetings/{meeting_id}/join to trigger the bot. Transcript will
+    appear at GET /api/meetings/{meeting_id}/transcript (ACS or Media Bot path).
+    """
+    now = datetime.now(timezone.utc)
+    start = now
+    end = now + timedelta(hours=1)
+    meeting_id = uuid_mod.uuid4()
+    thread_id = _extract_thread_id_from_join_url(body.join_url)
+    # Use a stable fake ID for teams_meeting_id so we can look up by join_url if needed
+    teams_meeting_id = f"test-{meeting_id.hex[:12]}"
+
+    meeting = Meeting(
+        id=meeting_id,
+        teams_meeting_id=teams_meeting_id,
+        thread_id=thread_id,
+        join_url=body.join_url,
+        subject=body.subject,
+        organizer_id="test-organizer",
+        organizer_name=body.organizer_name,
+        organizer_email=body.organizer_email,
+        scheduled_start=start,
+        scheduled_end=end,
+        status="scheduled",
+    )
+    db.add(meeting)
+    await db.commit()
+    await db.refresh(meeting)
+    logger.info(
+        "Created test meeting",
+        extra={"meeting_id": str(meeting_id), "subject": body.subject},
+    )
+    return MeetingResponse.model_validate(meeting)
 
 
 @router.get("", response_model=MeetingListResponse)

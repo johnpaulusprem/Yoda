@@ -1,5 +1,6 @@
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, WebSocket
 
@@ -65,6 +66,8 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler
     app.state.bot_commander = bot_commander
 
+    subscription_task: asyncio.Task[None] | None = None
+
     async with async_session_factory() as db:
         acs_service = ACSCallService(settings=settings, db=db)
         app.state.acs_service = acs_service
@@ -114,17 +117,37 @@ async def lifespan(app: FastAPI):
         scheduler.start()
         logger.info("Scheduler started")
 
-        # Set up calendar subscriptions for opted-in users
-        try:
-            await calendar_watcher.setup_subscriptions()
-            logger.info("Calendar subscriptions initialized")
-        except Exception:
-            logger.exception("Failed to set up calendar subscriptions")
+        # Set up calendar subscriptions for opted-in users.
+        #
+        # This can involve DB + external Graph calls and may hang if the DB isn't
+        # reachable in local dev. Run it in the background so the API can still
+        # come up (e.g. /health) and we can inspect logs/config.
+        async def _setup_calendar_subscriptions() -> None:
+            try:
+                await asyncio.wait_for(
+                    calendar_watcher.setup_subscriptions(),
+                    timeout=30,
+                )
+                logger.info("Calendar subscriptions initialized")
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Calendar subscription setup timed out; continuing startup"
+                )
+            except Exception:
+                logger.exception("Failed to set up calendar subscriptions")
+
+        subscription_task = asyncio.create_task(
+            _setup_calendar_subscriptions()
+        )
 
         yield
 
         # Shutdown
         scheduler.shutdown(wait=False)
+        if subscription_task is not None and not subscription_task.done():
+            subscription_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await subscription_task
         set_shared_bot_commander(None)
         await bot_commander.close()
         await graph_client.close()
