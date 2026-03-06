@@ -6,7 +6,8 @@ using Microsoft.Graph.Communications.Calls.Media;
 using Microsoft.Graph.Communications.Client;
 using Microsoft.Graph.Communications.Common.Telemetry;
 using Microsoft.Graph.Communications.Resources;
-using Microsoft.Graph;
+using Microsoft.Graph.Models;
+using Microsoft.Skype.Bots.Media;
 using MediaBot.Configuration;
 using MediaBot.Models;
 
@@ -206,8 +207,10 @@ public class BotService : IHostedService
                 if (_isWindows && _commsClient != null)
                 {
                     // Production path: use Graph Communications SDK to join meeting
-                    callId = await JoinViaGraphSdkAsync(
-                        request, backend, transcriber, handlerLogger, out callHandler);
+                    var result = await JoinViaGraphSdkAsync(
+                        request, backend, transcriber, handlerLogger);
+                    callId = result.callId;
+                    callHandler = result.callHandler;
                 }
                 else
                 {
@@ -257,12 +260,11 @@ public class BotService : IHostedService
     /// Parses the join URL, creates a media session with receive-only audio,
     /// and places the call via Graph API.
     /// </summary>
-    private async Task<string> JoinViaGraphSdkAsync(
+    private async Task<(string callId, CallHandler callHandler)> JoinViaGraphSdkAsync(
         JoinMeetingRequest request,
         PythonBackendClient backend,
         SpeechTranscriber transcriber,
-        ILogger<CallHandler> handlerLogger,
-        out CallHandler callHandler)
+        ILogger<CallHandler> handlerLogger)
     {
         // Parse the Teams meeting join URL into chatInfo + meetingInfo
         var (chatInfo, meetingInfo, tenantId) = TeamsJoinUrlParser.Parse(request.JoinUrl);
@@ -274,12 +276,12 @@ public class BotService : IHostedService
                 StreamDirections = StreamDirection.Recvonly,
                 SupportedAudioFormat = AudioFormat.Pcm16K,
             },
-            default, // no video
-            default  // no VBSS
+            (VideoSocketSettings?)null, // no video
+            (VideoSocketSettings?)null  // no VBSS
         );
 
         // Subscribe to audio frames
-        callHandler = new CallHandler(transcriber, backend, request.MeetingId, handlerLogger);
+        var callHandler = new CallHandler(transcriber, backend, request.MeetingId, handlerLogger);
         var handler = callHandler; // capture for lambda
 
         var audioSocket = mediaSession.AudioSocket;
@@ -298,9 +300,9 @@ public class BotService : IHostedService
             TenantId = tenantId,
             MediaConfig = new AppHostedMediaConfig
             {
-                Blob = mediaSession.GetSerializableContent(),
+                Blob = mediaSession.GetMediaConfiguration()?.ToString(),
             },
-            RequestedModalities = new[] { Modality.Audio },
+            RequestedModalities = new List<Modality?> { Modality.Audio },
         }, mediaSession);
 
         // Subscribe to call state and participant changes
@@ -331,10 +333,11 @@ public class BotService : IHostedService
                     {
                         foreach (var stream in participant.Resource.MediaStreams)
                         {
-                            if (stream.MediaType == Modality.Audio && stream.SourceId.HasValue)
+                            if (stream.MediaType == Modality.Audio && !string.IsNullOrEmpty(stream.SourceId)
+                                && uint.TryParse(stream.SourceId, out var msi))
                             {
                                 handler.UpdateParticipant(
-                                    stream.SourceId.Value,
+                                    msi,
                                     user.Id ?? "",
                                     user.DisplayName ?? "Unknown");
                             }
@@ -350,7 +353,7 @@ public class BotService : IHostedService
             }
         };
 
-        return call.Resource.Id;
+        return (call.Resource.Id ?? throw new InvalidOperationException("Call resource ID is null"), callHandler);
     }
 
     public async Task LeaveMeetingAsync(string callId)
@@ -464,13 +467,16 @@ internal class GraphAuthAdapter : Microsoft.Graph.Communications.Client.Authenti
         await _auth.AuthenticateOutboundRequestAsync(request);
     }
 
-    public async Task<Microsoft.Graph.Communications.Common.RequestValidationResult> ValidateInboundRequestAsync(
+    public Task<Microsoft.Graph.Communications.Client.Authentication.RequestValidationResult> ValidateInboundRequestAsync(
         HttpRequestMessage request)
     {
         // TODO: Validate JWT token from Graph callbacks in production
         // For now, accept all — HMAC validation on the controller provides some protection
         var token = request.Headers.Authorization?.Parameter;
-        return new Microsoft.Graph.Communications.Common.RequestValidationResult(
-            !string.IsNullOrEmpty(token));
+        var result = new Microsoft.Graph.Communications.Client.Authentication.RequestValidationResult
+        {
+            IsValid = !string.IsNullOrEmpty(token),
+        };
+        return Task.FromResult(result);
     }
 }

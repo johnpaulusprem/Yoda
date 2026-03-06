@@ -12,8 +12,14 @@ build/
 venv/
 ENV/
 
-# Environment
+# Environment & secrets
 .env
+.env.*
+!.env.example
+*-secrets.env
+media-bot/src/MediaBot/appsettings.Development.json
+media-bot/src/MediaBot/appsettings.Production.json
+media-bot/media-bot-cert.pfx
 
 # IDE
 .vscode/

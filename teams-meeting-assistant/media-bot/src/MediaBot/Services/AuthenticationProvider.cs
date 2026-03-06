@@ -32,8 +32,7 @@ public class AuthenticationProvider
         if (string.IsNullOrEmpty(opts.AppId) || string.IsNullOrEmpty(opts.AppSecret))
         {
             _logger.LogWarning(
-                "AuthenticationProvider initialized without AppId/AppSecret — "
-                "Graph API calls will fail");
+                "AuthenticationProvider initialized without AppId/AppSecret - Graph API calls will fail");
         }
 
         _app = ConfidentialClientApplicationBuilder
@@ -47,7 +46,7 @@ public class AuthenticationProvider
 
     /// <summary>
     /// Acquire an app-only access token for Microsoft Graph.
-    /// Uses MSAL token cache — only calls Azure AD when token is expired.
+    /// Uses MSAL token cache - only calls Azure AD when token is expired.
     /// </summary>
     public async Task<string> AcquireTokenAsync()
     {

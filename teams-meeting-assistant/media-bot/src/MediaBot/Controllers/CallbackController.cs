@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Graph.Communications.Client;
 using MediaBot.Services;
 
 namespace MediaBot.Controllers;
@@ -36,11 +38,16 @@ public class CallbackController : ControllerBase
         {
             try
             {
-                await _botService.CommsClient.ProcessNotificationAsync(
-                    Request.Headers.ToDictionary(
-                        h => h.Key,
-                        h => (IEnumerable<string>)h.Value!),
-                    body);
+                // Build an HttpRequestMessage from the incoming ASP.NET Core request
+                // so the Graph Communications SDK extension method can process it.
+                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, Request.GetEncodedUrl());
+                foreach (var header in Request.Headers)
+                {
+                    httpRequestMessage.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray());
+                }
+                httpRequestMessage.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+
+                await _botService.CommsClient.ProcessNotificationAsync(httpRequestMessage);
             }
             catch (Exception ex)
             {

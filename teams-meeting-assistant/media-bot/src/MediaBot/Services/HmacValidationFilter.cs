@@ -8,10 +8,11 @@ using MediaBot.Configuration;
 namespace MediaBot.Services;
 
 /// <summary>
-/// Action filter that validates HMAC-SHA256 signatures on incoming requests.
+/// Resource filter that validates HMAC-SHA256 signatures on incoming requests.
+/// Runs BEFORE model binding so the request body hasn't been consumed yet.
 /// Applied to controllers/actions that receive commands from the Python backend.
 /// </summary>
-public class HmacValidationFilter : IAsyncActionFilter
+public class HmacValidationFilter : IAsyncResourceFilter
 {
     private readonly string _hmacKey;
     private readonly ILogger<HmacValidationFilter> _logger;
@@ -25,8 +26,8 @@ public class HmacValidationFilter : IAsyncActionFilter
         _logger = logger;
     }
 
-    public async Task OnActionExecutionAsync(
-        ActionExecutingContext context, ActionExecutionDelegate next)
+    public async Task OnResourceExecutionAsync(
+        ResourceExecutingContext context, ResourceExecutionDelegate next)
     {
         // Skip validation if no key configured (dev mode)
         if (string.IsNullOrEmpty(_hmacKey))

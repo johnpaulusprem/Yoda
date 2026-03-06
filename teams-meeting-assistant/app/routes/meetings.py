@@ -33,6 +33,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/health/media-bot")
+async def check_media_bot() -> dict:
+    """Check if the C# Media Bot is reachable."""
+    from app.services.bot_commander import get_shared_bot_commander, BotCommander
+    from app.config import Settings
+
+    bot = get_shared_bot_commander()
+    owns_bot = False
+
+    if bot is None:
+        bot = BotCommander(settings=Settings())
+        owns_bot = True
+
+    try:
+        capacity = await bot.get_capacity()
+        logger.info("Media Bot is reachable", extra={"capacity": capacity})
+        return {"status": "ok", "media_bot_url": bot.base_url, "capacity": capacity}
+    except Exception as exc:
+        logger.error("Media Bot is NOT reachable: %s", exc)
+        return {"status": "unreachable", "media_bot_url": bot.base_url, "error": str(exc)}
+    finally:
+        if owns_bot:
+            await bot.close()
+
+
+
 @router.post("", response_model=MeetingResponse, status_code=201)
 async def create_meeting(
     body: CreateMeetingRequest,

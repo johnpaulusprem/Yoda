@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Web;
-using Microsoft.Graph;
+using Microsoft.Graph.Models;
 
 namespace MediaBot.Services;
 

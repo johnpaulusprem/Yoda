@@ -2,7 +2,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
 
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Request, WebSocket
 
 from app.config import Settings
 from app.dependencies import async_session_factory, engine
@@ -182,6 +182,34 @@ app.include_router(action_items_router, prefix="/api/action-items", tags=["actio
 from app.routes.bot_events import router as bot_events_router  # noqa: E402
 
 app.include_router(bot_events_router, prefix="/api/bot-events", tags=["bot-events"])
+
+
+# Reverse proxy: forward Graph Communications callbacks to the C# Media Bot
+@app.api_route("/api/callbacks", methods=["GET", "POST"], tags=["proxy"])
+async def proxy_graph_callbacks(request: Request):
+    """Forward Graph SDK callbacks to the Media Bot (URL from MEDIA_BOT_BASE_URL)."""
+    import httpx
+
+    media_bot_url = request.app.state.settings.MEDIA_BOT_BASE_URL.rstrip("/")
+    body = await request.body()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        proxied = await client.request(
+            method=request.method,
+            url=f"{media_bot_url}/api/callbacks",
+            headers={
+                k: v for k, v in request.headers.items()
+                if k.lower() not in ("host", "content-length", "transfer-encoding")
+            },
+            content=body,
+            params=request.query_params,
+        )
+
+    from starlette.responses import Response
+    return Response(
+        content=proxied.content,
+        status_code=proxied.status_code,
+        headers=dict(proxied.headers),
+    )
 
 
 @app.websocket("/ws/transcription/{meeting_id}")
