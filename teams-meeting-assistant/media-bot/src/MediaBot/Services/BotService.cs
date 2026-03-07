@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Graph.Communications.Calls;
 using Microsoft.Graph.Communications.Calls.Media;
 using Microsoft.Graph.Communications.Client;
+using Microsoft.Graph.Communications.Client.Authentication;
 using Microsoft.Graph.Communications.Common.Telemetry;
 using Microsoft.Graph.Communications.Resources;
 using Microsoft.Graph.Models;
@@ -36,6 +37,7 @@ public class BotService : IHostedService
 
     // Graph Communications SDK client — only initialized on Windows
     private ICommunicationsClient? _commsClient;
+    private IGraphLogger? _graphLogger;
     private bool _isWindows;
 
     public BotService(
@@ -84,28 +86,61 @@ public class BotService : IHostedService
     /// </summary>
     private void InitializeGraphCommunicationsClient()
     {
+        // Validate required config before attempting initialization
+        if (string.IsNullOrEmpty(_opts.CertificateThumbprint))
+        {
+            _logger.LogError(
+                "CertificateThumbprint is not configured. " +
+                "Set Bot__CertificateThumbprint in environment or appsettings. " +
+                "Falling back to stub mode.");
+            _isWindows = false;
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_opts.BotBaseUrl))
+        {
+            _logger.LogError(
+                "BotBaseUrl is not configured. " +
+                "Set Bot__BotBaseUrl in environment or appsettings. " +
+                "Falling back to stub mode.");
+            _isWindows = false;
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_opts.MediaPlatformInstancePublicIp))
+        {
+            _logger.LogError(
+                "MediaPlatformInstancePublicIp is not configured. " +
+                "Set Bot__MediaPlatformInstancePublicIp to the VM's public IP. " +
+                "Falling back to stub mode.");
+            _isWindows = false;
+            return;
+        }
+
         try
         {
             var authProvider = _sp.GetRequiredService<AuthenticationProvider>();
 
-            var publicIp = !string.IsNullOrEmpty(_opts.MediaPlatformInstancePublicIp)
-                ? IPAddress.Parse(_opts.MediaPlatformInstancePublicIp)
-                : IPAddress.Loopback;
+            var publicIp = IPAddress.Parse(_opts.MediaPlatformInstancePublicIp);
+            var fqdn = new Uri(_opts.BotBaseUrl).Host;
 
             var mediaPlatformSettings = new MediaPlatformSettings
             {
                 MediaPlatformInstanceSettings = new MediaPlatformInstanceSettings
                 {
-                    CertificateThumbprint = _opts.CertificateThumbprint ?? "",
+                    CertificateThumbprint = _opts.CertificateThumbprint,
                     InstanceInternalPort = _opts.MediaPlatformInstanceInternalPort,
                     InstancePublicIPAddress = publicIp,
                     InstancePublicPort = _opts.MediaPlatformInstanceInternalPort,
-                    ServiceFqdn = new Uri(_opts.BotBaseUrl).Host,
+                    ServiceFqdn = fqdn,
                 },
                 ApplicationId = authProvider.AppId,
             };
 
-            _commsClient = new CommunicationsClientBuilder("MediaBot", authProvider.AppId)
+            // Create GraphLogger — required by the SDK for internal diagnostics
+            _graphLogger = new GraphLogger("MediaBot");
+
+            _commsClient = new CommunicationsClientBuilder("MediaBot", authProvider.AppId, _graphLogger)
                 .SetAuthenticationProvider(new GraphAuthAdapter(authProvider))
                 .SetMediaPlatformSettings(mediaPlatformSettings)
                 .SetNotificationUrl(new Uri($"{_opts.BotBaseUrl}/api/callbacks"))
@@ -116,9 +151,10 @@ public class BotService : IHostedService
             _commsClient.Calls().OnUpdated += OnCallCollectionUpdated;
 
             _logger.LogInformation(
-                "Graph Communications SDK initialized (FQDN: {Fqdn}, Port: {Port})",
-                new Uri(_opts.BotBaseUrl).Host,
-                _opts.MediaPlatformInstanceInternalPort);
+                "Graph Communications SDK initialized (FQDN: {Fqdn}, Port: {Port}, CertThumbprint: {Thumbprint})",
+                fqdn,
+                _opts.MediaPlatformInstanceInternalPort,
+                _opts.CertificateThumbprint[..8] + "...");
         }
         catch (Exception ex)
         {
@@ -172,6 +208,7 @@ public class BotService : IHostedService
             _commsClient = null;
         }
 
+        (_graphLogger as IDisposable)?.Dispose();
         _joinLock.Dispose();
         _logger.LogInformation("BotService stopped");
     }
@@ -269,6 +306,12 @@ public class BotService : IHostedService
         // Parse the Teams meeting join URL into chatInfo + meetingInfo
         var (chatInfo, meetingInfo, tenantId) = TeamsJoinUrlParser.Parse(request.JoinUrl);
 
+        _logger.LogInformation(
+            "Parsed join URL for meeting {MeetingId}: threadId={ThreadId}, tenantId={TenantId}",
+            request.MeetingId,
+            chatInfo.ThreadId?[..Math.Min(30, chatInfo.ThreadId?.Length ?? 0)],
+            tenantId);
+
         // Create media session: receive-only audio (16kHz PCM mono)
         var mediaSession = _commsClient!.CreateMediaSession(
             new AudioSocketSettings
@@ -280,20 +323,19 @@ public class BotService : IHostedService
             (VideoSocketSettings?)null  // no VBSS
         );
 
-        // Subscribe to audio frames
+        // Set up the call handler and audio pipeline BEFORE placing the call
         var callHandler = new CallHandler(transcriber, backend, request.MeetingId, handlerLogger);
-        var handler = callHandler; // capture for lambda
 
         var audioSocket = mediaSession.AudioSocket;
         audioSocket.AudioMediaReceived += (sender, args) =>
         {
             var buffer = args.Buffer;
-            handler.OnAudioReceived(buffer.Data, (int)buffer.Length, buffer.ActiveSpeakers);
+            callHandler.OnAudioReceived(buffer.Data, (int)buffer.Length, buffer.ActiveSpeakers);
             buffer.Dispose();
         };
 
-        // Place the call to join the meeting
-        var call = await _commsClient.Calls().AddAsync(new Call
+        // Build the Graph Call object for joining via app-hosted media
+        var callRequest = new Call
         {
             ChatInfo = chatInfo,
             MeetingInfo = meetingInfo,
@@ -303,17 +345,49 @@ public class BotService : IHostedService
                 Blob = mediaSession.GetMediaConfiguration()?.ToString(),
             },
             RequestedModalities = new List<Modality?> { Modality.Audio },
-        }, mediaSession);
+        };
 
-        // Subscribe to call state and participant changes
+        _logger.LogInformation(
+            "Placing Graph call for meeting {MeetingId} with app-hosted media...",
+            request.MeetingId);
+
+        // Place the call to join the meeting
+        ICall call;
+        try
+        {
+            call = await _commsClient.Calls().AddAsync(callRequest, mediaSession);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to place Graph call for meeting {MeetingId}. " +
+                "Check: (1) App registration has Calls.JoinGroupCall.All + Calls.AccessMedia.All permissions, " +
+                "(2) Certificate thumbprint {Thumbprint} is in LocalMachine\\My, " +
+                "(3) Public IP {PublicIp} is correct, " +
+                "(4) Port {Port} is open for TCP+UDP, " +
+                "(5) Bot base URL {BaseUrl} is reachable from internet",
+                request.MeetingId,
+                _opts.CertificateThumbprint?[..Math.Min(8, _opts.CertificateThumbprint?.Length ?? 0)],
+                _opts.MediaPlatformInstancePublicIp,
+                _opts.MediaPlatformInstanceInternalPort,
+                _opts.BotBaseUrl);
+            throw;
+        }
+
+        // Subscribe to call state changes IMMEDIATELY after AddAsync returns
         call.OnUpdated += async (sender, args) =>
         {
             try
             {
-                if (sender.Resource.State == CallState.Established)
-                    await handler.OnCallEstablishedAsync();
-                else if (sender.Resource.State == CallState.Terminated)
-                    await handler.OnCallTerminatedAsync();
+                var state = sender.Resource.State;
+                _logger.LogInformation(
+                    "Call state changed for meeting {MeetingId}: {State}",
+                    request.MeetingId, state);
+
+                if (state == CallState.Established)
+                    await callHandler.OnCallEstablishedAsync();
+                else if (state == CallState.Terminated)
+                    await callHandler.OnCallTerminatedAsync();
             }
             catch (Exception ex)
             {
@@ -329,14 +403,14 @@ public class BotService : IHostedService
                 foreach (var participant in sender)
                 {
                     var user = participant.Resource?.Info?.Identity?.User;
-                    if (user != null && participant.Resource.MediaStreams != null)
+                    if (user != null && participant.Resource?.MediaStreams != null)
                     {
                         foreach (var stream in participant.Resource.MediaStreams)
                         {
                             if (stream.MediaType == Modality.Audio && !string.IsNullOrEmpty(stream.SourceId)
                                 && uint.TryParse(stream.SourceId, out var msi))
                             {
-                                handler.UpdateParticipant(
+                                callHandler.UpdateParticipant(
                                     msi,
                                     user.Id ?? "",
                                     user.DisplayName ?? "Unknown");
@@ -344,7 +418,7 @@ public class BotService : IHostedService
                         }
                     }
                 }
-                await handler.SendParticipantUpdateAsync();
+                await callHandler.SendParticipantUpdateAsync();
             }
             catch (Exception ex)
             {
@@ -353,7 +427,12 @@ public class BotService : IHostedService
             }
         };
 
-        return (call.Resource.Id ?? throw new InvalidOperationException("Call resource ID is null"), callHandler);
+        var callId = call.Resource.Id ?? throw new InvalidOperationException("Call resource ID is null");
+        _logger.LogInformation(
+            "Graph call placed successfully for meeting {MeetingId}, callId={CallId}, state={State}",
+            request.MeetingId, callId, call.Resource.State);
+
+        return (callId, callHandler);
     }
 
     public async Task LeaveMeetingAsync(string callId)
@@ -376,8 +455,6 @@ public class BotService : IHostedService
         {
             // Hang up the Graph call FIRST — this triggers the OnCallTerminated
             // callback which sends meeting_ended and stops the transcriber.
-            // By doing this before disposing, we avoid ObjectDisposedException
-            // in the callback and prevent duplicate meeting_ended events.
             if (_isWindows && _commsClient != null)
             {
                 try
@@ -451,9 +528,10 @@ public class BotService : IHostedService
 
 /// <summary>
 /// Adapter that bridges our AuthenticationProvider to the Graph Communications SDK's
-/// IRequestAuthenticationProvider interface.
+/// IRequestAuthenticationProvider interface. Implements proper JWT validation for
+/// inbound callbacks and tenant-aware token acquisition for outbound requests.
 /// </summary>
-internal class GraphAuthAdapter : Microsoft.Graph.Communications.Client.Authentication.IRequestAuthenticationProvider
+internal class GraphAuthAdapter : IRequestAuthenticationProvider
 {
     private readonly AuthenticationProvider _auth;
 
@@ -464,19 +542,26 @@ internal class GraphAuthAdapter : Microsoft.Graph.Communications.Client.Authenti
 
     public async Task AuthenticateOutboundRequestAsync(HttpRequestMessage request, string tenant)
     {
-        await _auth.AuthenticateOutboundRequestAsync(request);
+        // Pass the tenant to get a tenant-specific token
+        await _auth.AuthenticateOutboundRequestAsync(request, tenant);
     }
 
-    public Task<Microsoft.Graph.Communications.Client.Authentication.RequestValidationResult> ValidateInboundRequestAsync(
+    public async Task<RequestValidationResult> ValidateInboundRequestAsync(
         HttpRequestMessage request)
     {
-        // TODO: Validate JWT token from Graph callbacks in production
-        // For now, accept all — HMAC validation on the controller provides some protection
         var token = request.Headers.Authorization?.Parameter;
-        var result = new Microsoft.Graph.Communications.Client.Authentication.RequestValidationResult
+        var (isValid, tenantId) = await _auth.ValidateInboundTokenAsync(token);
+
+        var result = new RequestValidationResult { IsValid = isValid };
+
+        // Set tenant on the request properties so the SDK can use it
+        if (isValid && !string.IsNullOrEmpty(tenantId))
         {
-            IsValid = !string.IsNullOrEmpty(token),
-        };
-        return Task.FromResult(result);
+#pragma warning disable CS0618 // Properties is obsolete but Graph SDK still uses it
+            request.Properties["TenantId"] = tenantId;
+#pragma warning restore CS0618
+        }
+
+        return result;
     }
 }
