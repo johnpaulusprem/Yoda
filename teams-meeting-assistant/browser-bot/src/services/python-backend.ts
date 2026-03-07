@@ -9,6 +9,9 @@ export class PythonBackendClient {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.hmacSecret = hmacSecret;
     this.botInstanceId = botInstanceId;
+    if (!hmacSecret) {
+      console.warn("PythonBackendClient: HMAC secret not configured — requests will be unsigned");
+    }
   }
 
   async sendTranscriptChunk(

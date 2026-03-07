@@ -14,6 +14,9 @@ RUN npm run build
 # PulseAudio null sink for audio capture fallback
 RUN apt-get update && apt-get install -y pulseaudio && rm -rf /var/lib/apt/lists/*
 
+# Run as non-root user (pwuser exists in the playwright base image)
+USER pwuser
+
 EXPOSE 3001
 
 CMD ["node", "dist/index.js"]

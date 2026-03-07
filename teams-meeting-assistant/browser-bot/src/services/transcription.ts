@@ -150,9 +150,25 @@ export class TranscriptionService {
       0
     );
     const durationSec = totalSamples / 16000;
+
+    // Analyze audio to check if it's real speech or fake device silence
+    let maxAmplitude = 0;
+    let rmsSum = 0;
+    let sampleCount = 0;
+    for (const buf of this.audioBuffer) {
+      for (let i = 0; i < buf.length; i++) {
+        const abs = Math.abs(buf[i]);
+        if (abs > maxAmplitude) maxAmplitude = abs;
+        rmsSum += buf[i] * buf[i];
+        sampleCount++;
+      }
+    }
+    const rms = sampleCount > 0 ? Math.sqrt(rmsSum / sampleCount) : 0;
+
     console.log(
       `[${this.meetingId}] Audio buffer: ${durationSec.toFixed(1)}s ` +
-      `(${this.audioBuffer.length} chunks, ${totalSamples} samples) — ` +
+      `(${this.audioBuffer.length} chunks, ${totalSamples} samples) ` +
+      `peak=${maxAmplitude.toFixed(4)} rms=${rms.toFixed(4)} — ` +
       `needs Azure Speech SDK for transcription`
     );
     this.audioBuffer = [];

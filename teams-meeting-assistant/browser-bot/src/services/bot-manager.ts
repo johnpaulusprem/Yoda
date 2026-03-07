@@ -50,8 +50,6 @@ export class BotManager {
           "--disable-setuid-sandbox",
           "--use-fake-ui-for-media-stream",
           "--use-fake-device-for-media-stream",
-          "--disable-web-security",
-          "--allow-running-insecure-content",
           "--autoplay-policy=no-user-gesture-required",
         ],
       });
