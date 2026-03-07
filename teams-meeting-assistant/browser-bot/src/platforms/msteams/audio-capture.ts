@@ -23,9 +23,16 @@ export async function startAudioCapture(page: Page): Promise<AudioStream> {
     const BUFFER_SIZE = 4096;
 
     function captureAudioElement(audio: HTMLAudioElement) {
-      if (!audio.srcObject) return;
+      if (!audio.srcObject) {
+        console.log(`[YodaBot] Skipping ${audio.id} — no srcObject`);
+        return;
+      }
 
       const ctx = new AudioContext();
+      // Resume AudioContext — headless Chromium may start it suspended
+      if (ctx.state === "suspended") {
+        ctx.resume().then(() => console.log(`[YodaBot] AudioContext resumed for ${audio.id}`));
+      }
       const source = ctx.createMediaStreamSource(audio.srcObject as MediaStream);
       const processor = ctx.createScriptProcessor(BUFFER_SIZE, 1, 1);
 
@@ -66,7 +73,14 @@ export async function startAudioCapture(page: Page): Promise<AudioStream> {
     }
 
     // Capture existing RTC audio elements
-    document.querySelectorAll<HTMLAudioElement>('audio[data-rtc-track]').forEach(captureAudioElement);
+    const rtcAudios = document.querySelectorAll<HTMLAudioElement>('audio[data-rtc-track]');
+    console.log(`[YodaBot] Found ${rtcAudios.length} RTC audio elements to capture`);
+    rtcAudios.forEach((audio) => {
+      const stream = audio.srcObject as MediaStream | null;
+      const tracks = stream?.getAudioTracks() || [];
+      console.log(`[YodaBot] ${audio.id}: srcObject=${!!stream}, audioTracks=${tracks.length}, trackStates=${tracks.map(t => t.readyState).join(',')}`);
+      captureAudioElement(audio);
+    });
 
     // Watch for new RTC audio elements (more tracks may arrive after initial connection)
     const observer = new MutationObserver((mutations) => {

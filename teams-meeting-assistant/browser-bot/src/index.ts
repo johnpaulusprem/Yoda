@@ -23,14 +23,18 @@ if (NODE_ENV === "production" && !API_KEY) {
 }
 
 // --- Allowed Teams URL patterns (SSRF protection) ---
+// Only allow actual meeting join URLs — block redirects and arbitrary paths
 const ALLOWED_JOIN_URL_PATTERNS = [
-  /^https:\/\/teams\.microsoft\.com\//,
-  /^https:\/\/teams\.live\.com\//,
-  /^https:\/\/.*\.teams\.microsoft\.com\//,
+  /^https:\/\/teams\.microsoft\.com\/meet\//,
+  /^https:\/\/teams\.microsoft\.com\/l\/meetup-join\//,
+  /^https:\/\/teams\.live\.com\/meet\//,
+  /^https:\/\/[a-z0-9-]+\.teams\.microsoft\.com\/meet\//,
 ];
 
 function isAllowedJoinUrl(url: string): boolean {
   if (typeof url !== "string" || url.length > 2048) return false;
+  // Block URLs with auth components (@) that could redirect
+  if (url.includes("@")) return false;
   return ALLOWED_JOIN_URL_PATTERNS.some((pattern) => pattern.test(url));
 }
 
