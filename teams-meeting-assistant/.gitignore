@@ -44,3 +44,11 @@ alembic/versions/__pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+media-bot/src/MediaBot/ecs-cache/
+
+# Browser bot
+browser-bot/node_modules/
+browser-bot/dist/
+browser-bot/debug-screenshots/
+browser-bot/bot.log
+browser-bot/package-lock.json
