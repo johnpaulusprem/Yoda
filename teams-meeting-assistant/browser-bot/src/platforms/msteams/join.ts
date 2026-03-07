@@ -98,26 +98,35 @@ export async function joinTeamsMeeting(
     await debugScreenshot(page, "02-no-continue-btn");
   }
 
-  // Wait for pre-join screen to fully load
-  await page.waitForTimeout(3000);
-  await debugScreenshot(page, "03-prejoin-screen");
-
-  // Step 2: Set bot name in the name input field (do this FIRST before touching any toggles)
+  // Step 2: Wait for pre-join screen and set bot name
+  // Wait for the name input OR join button to confirm pre-join is loaded
+  const nameInputSelector =
+    '#username, ' +
+    'input[data-tid="prejoin-display-name-input"], ' +
+    'input[placeholder*="name" i], ' +
+    'input[placeholder*="Type your name" i]';
   try {
-    const nameInput = page.locator(
-      '#username, ' +
-      'input[data-tid="prejoin-display-name-input"], ' +
-      'input[placeholder*="name" i], ' +
-      'input[placeholder*="Type your name" i]'
-    );
-    const input = nameInput.first();
-    if (await input.isVisible({ timeout: 5000 })) {
-      await input.fill("");
-      await input.fill(botName);
-      console.log(`Set bot name to "${botName}"`);
+    await page.waitForSelector(nameInputSelector, { timeout: 15000 });
+    console.log("Pre-join screen loaded — name input visible");
+    await page.waitForTimeout(1000); // Let the UI settle
+    await debugScreenshot(page, "03-prejoin-screen");
+
+    const input = page.locator(nameInputSelector).first();
+    await input.click(); // Focus the input first
+    await input.fill(""); // Clear any existing value
+    await input.fill(botName);
+    // Verify the name was actually set
+    const nameValue = await input.inputValue();
+    console.log(`Set bot name to "${botName}" (verified: "${nameValue}")`);
+    if (!nameValue) {
+      // Fallback: type character by character
+      await input.click();
+      await page.keyboard.type(botName, { delay: 50 });
+      console.log(`Typed bot name character by character`);
     }
   } catch {
     console.log("Name input not found — may be logged in already");
+    await debugScreenshot(page, "03-prejoin-screen");
   }
 
   // Step 3: Ensure "Computer audio" is selected — THIS IS CRITICAL
