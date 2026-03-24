@@ -1,0 +1,16 @@
+{
+  "/api/meetings": { "target": "http://localhost:8010", "secure": false, "changeOrigin": true },
+  "/api/action-items": { "target": "http://localhost:8010", "secure": false, "changeOrigin": true },
+  "/api/admin": { "target": "http://localhost:8010", "secure": false, "changeOrigin": true },
+  "/api/bot-events": { "target": "http://localhost:8010", "secure": false, "changeOrigin": true },
+  "/webhooks": { "target": "http://localhost:8010", "secure": false, "changeOrigin": true },
+  "/api/documents": { "target": "http://localhost:8011", "secure": false, "changeOrigin": true },
+  "/api/chat": { "target": "http://localhost:8012", "secure": false, "changeOrigin": true },
+  "/api/dashboard": { "target": "http://localhost:8013", "secure": false, "changeOrigin": true },
+  "/api/insights": { "target": "http://localhost:8013", "secure": false, "changeOrigin": true },
+  "/api/notifications": { "target": "http://localhost:8013", "secure": false, "changeOrigin": true },
+  "/api/search": { "target": "http://localhost:8013", "secure": false, "changeOrigin": true },
+  "/api/settings": { "target": "http://localhost:8013", "secure": false, "changeOrigin": true },
+  "/api/briefs": { "target": "http://localhost:8014", "secure": false, "changeOrigin": true },
+  "/api/digests": { "target": "http://localhost:8015", "secure": false, "changeOrigin": true }
+}

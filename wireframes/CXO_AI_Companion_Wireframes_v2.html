@@ -1,0 +1,1983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CXO AI Companion - Interactive Wireframes</title>
+  <style>
+    :root {
+      /* Dark theme (default) */
+      --bg-primary: #0a0f1a;
+      --bg-secondary: rgba(17, 24, 39, 0.5);
+      --bg-card: rgba(17, 24, 39, 0.5);
+      --bg-hover: #1f2937;
+      --bg-input: #1f2937;
+      --border-primary: #1f2937;
+      --border-secondary: rgba(55, 65, 81, 0.5);
+      --text-primary: #f9fafb;
+      --text-secondary: #9ca3af;
+      --text-muted: #6b7280;
+      --accent-blue: #3b82f6;
+      --accent-green: #10b981;
+      --accent-yellow: #f59e0b;
+      --accent-red: #ef4444;
+      --accent-purple: #8b5cf6;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+    
+    [data-theme="light"] {
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-card: #ffffff;
+      --bg-hover: #f1f5f9;
+      --bg-input: #f1f5f9;
+      --border-primary: #e2e8f0;
+      --border-secondary: #e2e8f0;
+      --text-primary: #1e293b;
+      --text-secondary: #64748b;
+      --text-muted: #94a3b8;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      transition: background 0.3s, color 0.3s;
+    }
+    
+    /* Layout */
+    .app { display: flex; height: 100vh; }
+    .sidebar { width: 260px; background: var(--bg-secondary); border-right: 1px solid var(--border-primary); display: flex; flex-direction: column; }
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .topbar { height: 64px; border-bottom: 1px solid var(--border-primary); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: var(--bg-secondary); }
+    .content { flex: 1; overflow-y: auto; padding: 24px; }
+    
+    /* Sidebar */
+    .logo { padding: 20px; border-bottom: 1px solid var(--border-primary); display: flex; align-items: center; gap: 12px; }
+    .logo-icon { width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+    .logo-text h1 { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+    .logo-text p { font-size: 11px; color: var(--text-muted); }
+    
+    .nav { flex: 1; padding: 12px; }
+    .nav-item { 
+      display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; 
+      cursor: pointer; transition: all 0.2s; color: var(--text-secondary); margin-bottom: 4px;
+    }
+    .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .nav-item.active { background: #3b82f6; color: white; }
+    .nav-item span { font-weight: 500; }
+    
+    /* Theme Toggle */
+    .theme-toggle { 
+      display: flex; align-items: center; gap: 8px; padding: 8px 12px; 
+      background: var(--bg-hover); border-radius: 8px; cursor: pointer; 
+      border: 1px solid var(--border-secondary); margin: 12px;
+    }
+    .theme-toggle:hover { border-color: var(--accent-blue); }
+    .theme-toggle-track { 
+      width: 44px; height: 24px; background: var(--border-primary); border-radius: 12px; 
+      position: relative; transition: background 0.3s;
+    }
+    .theme-toggle-thumb { 
+      width: 20px; height: 20px; background: white; border-radius: 50%; 
+      position: absolute; top: 2px; left: 2px; transition: transform 0.3s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    [data-theme="light"] .theme-toggle-thumb { transform: translateX(20px); }
+    [data-theme="light"] .theme-toggle-track { background: var(--accent-blue); }
+    
+    /* Cards */
+    .card { 
+      background: var(--bg-card); 
+      border: 1px solid var(--border-secondary); 
+      border-radius: 16px; 
+      padding: 20px; 
+      margin-bottom: 16px; 
+      box-shadow: var(--shadow);
+    }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .card-title { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+    
+    /* Stats */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { 
+      background: var(--bg-card); 
+      border: 1px solid var(--border-secondary); 
+      border-radius: 16px; 
+      padding: 20px; 
+      cursor: pointer; 
+      transition: all 0.2s; 
+      box-shadow: var(--shadow);
+    }
+    .stat-card:hover { border-color: rgba(59, 130, 246, 0.5); transform: translateY(-2px); }
+    .stat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); }
+    .stat-label { font-size: 14px; color: var(--text-secondary); }
+    .stat-trend { font-size: 12px; margin-top: 8px; }
+    .stat-trend.up { color: var(--accent-green); }
+    .stat-trend.down { color: var(--accent-red); }
+    
+    /* Meetings */
+    .meeting-item { 
+      display: flex; align-items: center; justify-content: space-between; 
+      padding: 16px; background: var(--bg-hover); border-radius: 12px; 
+      cursor: pointer; transition: all 0.2s; margin-bottom: 8px;
+    }
+    .meeting-item:hover { background: var(--bg-input); transform: translateX(4px); }
+    .meeting-left { display: flex; align-items: center; gap: 16px; }
+    .meeting-time { min-width: 70px; font-weight: 600; color: var(--text-primary); }
+    .meeting-info { flex: 1; }
+    .meeting-title { font-weight: 500; color: var(--text-primary); margin-bottom: 2px; }
+    .meeting-attendees { font-size: 13px; color: var(--text-muted); }
+    .meeting-right { display: flex; align-items: center; gap: 8px; }
+    
+    /* Tags */
+    .tag { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+    .tag-green { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .tag-red { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .tag-yellow { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .tag-blue { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+    .tag-purple { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
+    
+    /* Actions */
+    .action-item { 
+      display: flex; align-items: flex-start; justify-content: space-between;
+      padding: 16px; background: var(--bg-hover); border-radius: 12px; margin-bottom: 8px;
+      transition: all 0.2s;
+    }
+    .action-item:hover { background: var(--bg-input); }
+    .action-left { display: flex; align-items: flex-start; gap: 12px; flex: 1; }
+    .action-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+    .action-dot.red { background: #ef4444; }
+    .action-dot.yellow { background: #f59e0b; }
+    .action-dot.blue { background: #3b82f6; }
+    .action-dot.green { background: #10b981; }
+    .action-content { flex: 1; }
+    .action-title { font-weight: 500; margin-bottom: 4px; color: var(--text-primary); }
+    .action-meta { font-size: 13px; color: var(--text-muted); }
+    
+    /* Journey buttons */
+    .journeys { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .journey-btn { 
+      padding: 20px; background: var(--bg-hover); border-radius: 12px; 
+      border: 1px solid transparent; cursor: pointer; transition: all 0.2s; text-align: center;
+    }
+    .journey-btn:hover { background: var(--bg-input); border-color: var(--border-secondary); transform: scale(1.02); }
+    .journey-icon { font-size: 24px; margin-bottom: 12px; }
+    .journey-title { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+    
+    /* Header */
+    .page-header { margin-bottom: 24px; }
+    .page-header h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; color: var(--text-primary); }
+    .page-header p { color: var(--text-secondary); }
+    
+    /* Search */
+    .search-box { position: relative; }
+    .search-box input { 
+      width: 320px; background: var(--bg-input); border: 1px solid var(--border-secondary); 
+      border-radius: 12px; padding: 10px 16px 10px 40px; color: var(--text-primary); font-size: 14px;
+    }
+    .search-box input::placeholder { color: var(--text-muted); }
+    .search-box input:focus { outline: none; border-color: #3b82f6; }
+    .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+    
+    /* Status indicator */
+    .status { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(16, 185, 129, 0.2); border-radius: 20px; }
+    .status-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; animation: pulse 2s infinite; }
+    .status-text { font-size: 13px; color: #10b981; }
+    
+    /* Avatar */
+    .avatar { width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; color: white; }
+    
+    /* Brief Page */
+    .brief-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+    .brief-title { font-size: 24px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary); }
+    .brief-meta { color: var(--text-secondary); }
+    .brief-timer { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(59, 130, 246, 0.2); border-radius: 20px; color: #3b82f6; font-size: 13px; font-weight: 500; }
+    
+    .attendee-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .attendee { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-hover); border-radius: 12px; }
+    .attendee-avatar { width: 44px; height: 44px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; color: white; font-size: 16px; }
+    .attendee-info { flex: 1; }
+    .attendee-name { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+    .attendee-role { font-size: 12px; color: var(--text-muted); }
+    .attendee-context { font-size: 11px; color: var(--accent-blue); margin-top: 2px; }
+    
+    .context-item { display: flex; gap: 12px; padding: 14px; background: var(--bg-hover); border-radius: 10px; margin-bottom: 10px; }
+    .context-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+    .context-text { font-size: 14px; color: var(--text-primary); line-height: 1.5; }
+    .context-meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    
+    .doc-item { 
+      display: flex; align-items: center; justify-content: space-between; 
+      padding: 14px; background: var(--bg-hover); border-radius: 10px; 
+      margin-bottom: 8px; cursor: pointer; transition: all 0.2s;
+    }
+    .doc-item:hover { background: var(--bg-input); transform: translateX(4px); }
+    .doc-left { display: flex; align-items: center; gap: 12px; }
+    .doc-icon { font-size: 24px; }
+    .doc-name { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+    .doc-updated { font-size: 12px; color: var(--text-muted); }
+    
+    .suggestion-box { background: linear-gradient(135deg, rgba(30, 58, 138, 0.3), rgba(88, 28, 135, 0.3)); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 16px; padding: 20px; }
+    [data-theme="light"] .suggestion-box { background: linear-gradient(135deg, rgba(219, 234, 254, 0.8), rgba(237, 233, 254, 0.8)); }
+    .suggestion-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #3b82f6; text-transform: uppercase; margin-bottom: 16px; }
+    .suggestion-item { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 14px; margin-bottom: 10px; padding: 8px 12px; background: var(--bg-hover); border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+    .suggestion-item:hover { background: var(--bg-input); color: var(--text-primary); }
+    
+    /* Summary Page */
+    .decision-box { background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+    .decision-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #10b981; text-transform: uppercase; margin-bottom: 16px; }
+    
+    .action-box { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+    .action-box-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #f59e0b; text-transform: uppercase; margin-bottom: 16px; }
+    
+    .conflict-box { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 16px; padding: 20px; }
+    .conflict-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #ef4444; text-transform: uppercase; margin-bottom: 12px; }
+    
+    /* Chat */
+    .chat-container { height: 100%; display: flex; flex-direction: column; background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-secondary); box-shadow: var(--shadow); }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 20px; }
+    .chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; }
+    .chat-empty-icon { width: 64px; height: 64px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 32px; margin-bottom: 16px; }
+    .chat-empty h3 { font-size: 20px; font-weight: 600; margin-bottom: 8px; color: var(--text-primary); }
+    .chat-empty p { color: var(--text-secondary); max-width: 400px; margin-bottom: 24px; }
+    .chat-suggestions { width: 100%; max-width: 400px; }
+    .chat-suggestion { padding: 12px; background: var(--bg-hover); border: 1px solid var(--border-secondary); border-radius: 8px; text-align: left; color: var(--text-secondary); font-size: 14px; cursor: pointer; transition: all 0.2s; margin-bottom: 8px; width: 100%; }
+    .chat-suggestion:hover { background: var(--bg-input); color: var(--text-primary); border-color: var(--accent-blue); }
+    
+    .chat-input-area { padding: 16px; border-top: 1px solid var(--border-secondary); }
+    .chat-input-box { display: flex; align-items: center; gap: 8px; background: var(--bg-input); border-radius: 12px; padding: 8px; border: 1px solid var(--border-secondary); }
+    .chat-input-box:focus-within { border-color: var(--accent-blue); }
+    .chat-input-box input { flex: 1; background: transparent; border: none; color: var(--text-primary); padding: 8px 12px; font-size: 14px; }
+    .chat-input-box input::placeholder { color: var(--text-muted); }
+    .chat-input-box input:focus { outline: none; }
+    .chat-btn { padding: 8px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-radius: 8px; transition: all 0.2s; }
+    .chat-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+    .chat-btn.send { background: #3b82f6; color: white; }
+    .chat-btn.send:hover { background: #2563eb; }
+    
+    .message { max-width: 80%; margin-bottom: 16px; }
+    .message.user { margin-left: auto; }
+    .message-bubble { padding: 16px; border-radius: 16px; font-size: 14px; line-height: 1.6; }
+    .message.user .message-bubble { background: #3b82f6; color: white; }
+    .message.assistant .message-bubble { background: var(--bg-hover); color: var(--text-primary); }
+    .message-sources { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-secondary); }
+    .message-sources-label { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+    .message-source { display: inline-block; padding: 4px 8px; background: var(--bg-input); border-radius: 4px; font-size: 12px; color: #3b82f6; margin-right: 4px; margin-bottom: 4px; cursor: pointer; }
+    .message-source:hover { background: var(--bg-hover); }
+    
+    /* Button */
+    .btn { padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; border: none; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-secondary { background: var(--bg-hover); color: var(--text-primary); border: 1px solid var(--border-secondary); }
+    .btn-secondary:hover { background: var(--bg-input); }
+
+    /* Join Meeting Buttons */
+    .btn-join {
+      background: #10b981; color: white; padding: 6px 14px; border-radius: 8px;
+      font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+      display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;
+      text-decoration: none; white-space: nowrap;
+    }
+    .btn-join:hover { background: #059669; transform: scale(1.02); }
+    .btn-join.pulse { animation: joinPulse 2s ease-in-out infinite; }
+    @keyframes joinPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+    }
+    .btn-join-large {
+      background: #10b981; color: white; padding: 10px 20px; border-radius: 10px;
+      font-size: 15px; font-weight: 600; cursor: pointer; border: none;
+      display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s;
+      text-decoration: none;
+    }
+    .btn-join-large:hover { background: #059669; transform: scale(1.02); }
+    .btn-join-large.pulse { animation: joinPulse 2s ease-in-out infinite; }
+    .btn-join-soon {
+      background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 6px 14px; border-radius: 8px;
+      font-size: 13px; font-weight: 500; border: 1px solid rgba(245, 158, 11, 0.3);
+      display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    }
+    .btn-join-progress {
+      background: rgba(59, 130, 246, 0.15); color: #3b82f6; padding: 6px 14px; border-radius: 8px;
+      font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid rgba(59, 130, 246, 0.3);
+      display: inline-flex; align-items: center; gap: 6px; text-decoration: none; white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .btn-join-progress:hover { background: rgba(59, 130, 246, 0.25); }
+    
+    /* Back link */
+    .back-link { color: var(--text-secondary); cursor: pointer; margin-bottom: 16px; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+    .back-link:hover { color: var(--text-primary); }
+    
+    /* Attention box */
+    .attention-box { background: linear-gradient(135deg, rgba(127, 29, 29, 0.2), rgba(120, 53, 15, 0.2)); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 16px; padding: 20px; }
+    [data-theme="light"] .attention-box { background: linear-gradient(135deg, rgba(254, 226, 226, 0.8), rgba(254, 243, 199, 0.8)); }
+    .attention-title { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; margin-bottom: 20px; color: var(--text-primary); }
+    
+    /* Insights */
+    .insight-card { background: var(--bg-card); border: 1px solid var(--border-secondary); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+    .insight-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .insight-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+    .insight-title { font-weight: 600; color: var(--text-primary); }
+    .insight-subtitle { font-size: 13px; color: var(--text-muted); }
+    .insight-content { color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+    .insight-metric { font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+    
+    /* Documents */
+    .doc-card { display: flex; align-items: center; gap: 16px; padding: 16px; background: var(--bg-hover); border-radius: 12px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s; }
+    .doc-card:hover { background: var(--bg-input); transform: translateX(4px); }
+    .doc-card-icon { width: 48px; height: 48px; background: var(--bg-input); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+    .doc-card-info { flex: 1; }
+    .doc-card-name { font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+    .doc-card-meta { font-size: 13px; color: var(--text-muted); }
+    
+    /* Weekly Digest */
+    .digest-section { margin-bottom: 24px; }
+    .digest-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .digest-list { padding-left: 20px; }
+    .digest-list li { color: var(--text-secondary); margin-bottom: 8px; line-height: 1.5; }
+    
+    /* Animations */
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
+    
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-hover); }
+    ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+    
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .journeys { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .stats { grid-template-columns: 1fr; }
+      .journeys { grid-template-columns: repeat(2, 1fr); }
+      .attendee-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">🧠</div>
+        <div class="logo-text">
+          <h1>CXO Companion</h1>
+          <p>Executive AI Assistant</p>
+        </div>
+      </div>
+      <nav class="nav">
+        <div class="nav-item active" onclick="showView('dashboard')">
+          <span>📊</span>
+          <span>Dashboard</span>
+        </div>
+        <div class="nav-item" onclick="showView('chat')">
+          <span>💬</span>
+          <span>Ask AI</span>
+        </div>
+        <div class="nav-item" onclick="showView('meetings')">
+          <span>📅</span>
+          <span>Meetings</span>
+        </div>
+        <div class="nav-item" onclick="showView('actions')">
+          <span>✅</span>
+          <span>Action Items</span>
+        </div>
+        <div class="nav-item" onclick="showView('documents')">
+          <span>📁</span>
+          <span>Documents</span>
+        </div>
+        <div class="nav-item" onclick="showView('insights')">
+          <span>📈</span>
+          <span>Insights</span>
+        </div>
+        <div class="nav-item" onclick="showView('digest')">
+          <span>📋</span>
+          <span>Weekly Digest</span>
+        </div>
+      </nav>
+      
+      <!-- Theme Toggle -->
+      <div class="theme-toggle" onclick="toggleTheme()">
+        <span id="theme-icon">🌙</span>
+        <div class="theme-toggle-track">
+          <div class="theme-toggle-thumb"></div>
+        </div>
+        <span id="theme-label" style="font-size: 13px; color: var(--text-secondary);">Dark</span>
+      </div>
+      
+      <div style="padding: 12px; border-top: 1px solid var(--border-primary);">
+        <div class="nav-item">
+          <span>⚙️</span>
+          <span>Settings</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="main">
+      <!-- Top Bar -->
+      <div class="topbar">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="Search meetings, documents, people...">
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div class="status">
+            <div class="status-dot"></div>
+            <span class="status-text">Connected to M365</span>
+          </div>
+          <div style="position: relative;">
+            <span style="cursor: pointer; font-size: 20px;">🔔</span>
+            <span style="position: absolute; top: -4px; right: -4px; width: 18px; height: 18px; background: #ef4444; border-radius: 50%; font-size: 11px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;">3</span>
+          </div>
+          <div class="avatar">AK</div>
+        </div>
+      </div>
+      
+      <!-- Content Area -->
+      <div class="content" id="content">
+        
+        <!-- ==================== DASHBOARD VIEW ==================== -->
+        <div id="dashboard-view" class="animate-fadeIn">
+          <div class="page-header">
+            <h1>Good morning, Arun</h1>
+            <p>Monday, January 27, 2026 • You have 6 meetings today</p>
+          </div>
+          
+          <!-- Stats -->
+          <div class="stats">
+            <div class="stat-card" onclick="showView('meetings')">
+              <div class="stat-header">
+                <span style="color: #3b82f6; font-size: 24px;">📅</span>
+                <span class="stat-value">6</span>
+              </div>
+              <div class="stat-label">Meetings Today</div>
+              <div class="stat-trend up">↑ 2 more than average</div>
+            </div>
+            <div class="stat-card" onclick="showView('actions')">
+              <div class="stat-header">
+                <span style="color: #f59e0b; font-size: 24px;">✅</span>
+                <span class="stat-value">18</span>
+              </div>
+              <div class="stat-label">Open Actions</div>
+              <div class="stat-trend down">↑ 5 from last week</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-header">
+                <span style="color: #ef4444; font-size: 24px;">⚠️</span>
+                <span class="stat-value">3</span>
+              </div>
+              <div class="stat-label">Overdue Items</div>
+              <div class="stat-trend down">Needs attention</div>
+            </div>
+            <div class="stat-card" onclick="showView('documents')">
+              <div class="stat-header">
+                <span style="color: #10b981; font-size: 24px;">📄</span>
+                <span class="stat-value">7</span>
+              </div>
+              <div class="stat-label">Docs to Review</div>
+              <div class="stat-trend">3 high priority</div>
+            </div>
+          </div>
+          
+          <!-- Today's Meetings -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Today's Meetings</span>
+              <span style="color: #3b82f6; font-size: 14px; cursor: pointer;" onclick="showView('meetings')">View all →</span>
+            </div>
+            
+            <div class="meeting-item" onclick="showView('brief')">
+              <div class="meeting-left">
+                <div class="meeting-time">9:00 AM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">Q4 Pipeline Review</div>
+                  <div class="meeting-attendees">Ravi Kumar, Sarah Chen, Mike Johnson +3 • Conf Room A</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-green">Brief Ready</span>
+                <span class="tag tag-red">High Priority</span>
+                <a class="btn-join pulse" onclick="event.stopPropagation();" href="#" title="Join Teams Meeting">📞 Join Now</a>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+
+            <div class="meeting-item" onclick="showView('brief')">
+              <div class="meeting-left">
+                <div class="meeting-time">10:30 AM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">1:1 with CFO (Priya Sharma)</div>
+                  <div class="meeting-attendees">Budget discussion, Q1 planning • Your Office</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-green">Brief Ready</span>
+                <span class="btn-join-soon">⏱️ Starts in 28 min</span>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+
+            <div class="meeting-item" onclick="showView('brief')">
+              <div class="meeting-left">
+                <div class="meeting-time">12:00 PM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">Product Roadmap Quarterly Review</div>
+                  <div class="meeting-attendees">Product, Engineering, Design leads • Teams Call</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-green">Brief Ready</span>
+                <span class="tag tag-yellow">Decision Needed</span>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+
+            <div class="meeting-item" onclick="showView('brief')">
+              <div class="meeting-left">
+                <div class="meeting-time">2:30 PM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">Board Deck Review</div>
+                  <div class="meeting-attendees">Leadership Team • Exec Boardroom</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-red">High Priority</span>
+                <span class="tag tag-purple">Prep Required</span>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+
+            <div class="meeting-item" onclick="showView('brief')">
+              <div class="meeting-left">
+                <div class="meeting-time">4:00 PM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">Customer Success Weekly</div>
+                  <div class="meeting-attendees">CS Team, Support Lead • Teams Call</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-green">Brief Ready</span>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+            
+            <div class="meeting-item" onclick="showView('brief')">
+              <div class="meeting-left">
+                <div class="meeting-time">5:30 PM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">1:1 with VP Engineering (Vikram Patel)</div>
+                  <div class="meeting-attendees">Hiring plan, tech debt discussion • His Office</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-green">Brief Ready</span>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Needs Attention -->
+          <div class="attention-box">
+            <div class="attention-title">
+              <span style="color: #ef4444;">⚠️</span>
+              Needs Your Attention
+            </div>
+            
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot red"></div>
+                <div class="action-content">
+                  <div class="action-title">Review and approve Q4 revised forecast</div>
+                  <div class="action-meta">Owner: Ravi Kumar · Due: Yesterday · From: Pipeline Review - Jan 24</div>
+                </div>
+              </div>
+              <span class="tag tag-red">OVERDUE</span>
+            </div>
+            
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot red"></div>
+                <div class="action-content">
+                  <div class="action-title">Sign off on Series C term sheet amendments</div>
+                  <div class="action-meta">Owner: You · Due: Today EOD · From: Board Meeting - Jan 20</div>
+                </div>
+              </div>
+              <span class="tag tag-red">DUE TODAY</span>
+            </div>
+            
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot yellow"></div>
+                <div class="action-content">
+                  <div class="action-title">Approve marketing budget increase (15%)</div>
+                  <div class="action-meta">Owner: You · Due: Tomorrow · From: Budget Review - Jan 23</div>
+                </div>
+              </div>
+              <span class="tag tag-yellow">Decision Pending</span>
+            </div>
+            
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot yellow"></div>
+                <div class="action-content">
+                  <div class="action-title">Review board deck draft before 2:30 PM meeting</div>
+                  <div class="action-meta">Owner: You · Due: Today 2:00 PM · 47 pages</div>
+                </div>
+              </div>
+              <span class="tag tag-purple">Prep Required</span>
+            </div>
+          </div>
+          
+          <!-- Recent Activity -->
+          <div class="card" style="margin-top: 16px;">
+            <div class="card-header">
+              <span class="card-title">Recent Activity</span>
+            </div>
+            <div style="font-size: 14px; color: var(--text-secondary); line-height: 2;">
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-secondary);">
+                <span>📄</span>
+                <span><strong style="color: var(--text-primary);">Board Deck v3.pptx</strong> updated by Priya Sharma • 2 hours ago</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-secondary);">
+                <span>✅</span>
+                <span><strong style="color: var(--text-primary);">Sarah Chen</strong> completed "Finalize Q1 hiring plan" • 3 hours ago</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-secondary);">
+                <span>💬</span>
+                <span><strong style="color: var(--text-primary);">Ravi Kumar</strong> mentioned you in Sales Channel • 4 hours ago</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0;">
+                <span>📅</span>
+                <span><strong style="color: var(--text-primary);">Meeting summary</strong> generated for "Ops Review" • Yesterday</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- User Journeys -->
+          <div class="card" style="margin-top: 16px;">
+            <div class="card-header">
+              <span class="card-title">Quick Actions</span>
+            </div>
+            <div class="journeys">
+              <div class="journey-btn" onclick="showView('brief')">
+                <div class="journey-icon">📅</div>
+                <div class="journey-title">Pre-Meeting Brief</div>
+              </div>
+              <div class="journey-btn" onclick="showView('chat')">
+                <div class="journey-icon">💬</div>
+                <div class="journey-title">Ask AI Anything</div>
+              </div>
+              <div class="journey-btn" onclick="showView('summary')">
+                <div class="journey-icon">📝</div>
+                <div class="journey-title">Meeting Summary</div>
+              </div>
+              <div class="journey-btn" onclick="showView('actions')">
+                <div class="journey-icon">✅</div>
+                <div class="journey-title">Track Actions</div>
+              </div>
+              <div class="journey-btn" onclick="showView('digest')">
+                <div class="journey-icon">📋</div>
+                <div class="journey-title">Weekly Digest</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- ==================== PRE-MEETING BRIEF VIEW ==================== -->
+        <div id="brief-view" style="display: none;" class="animate-fadeIn">
+          <div class="back-link" onclick="showView('dashboard')">← Back to Dashboard</div>
+          
+          <div class="brief-header">
+            <div>
+              <div class="brief-title">Q4 Pipeline Review</div>
+              <div class="brief-meta">Today at 9:00 AM · Conference Room A · 60 min · Recurring Weekly</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div class="brief-timer">
+                <span>⏱️</span>
+                Starts in 28 min
+              </div>
+              <a class="btn-join-large pulse" href="#" title="Join Teams Meeting">📞 Join Meeting</a>
+            </div>
+          </div>
+          
+          <!-- Attendees -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom: 16px;">Attendees (6)</div>
+            <div class="attendee-grid">
+              <div class="attendee">
+                <div class="attendee-avatar">RK</div>
+                <div class="attendee-info">
+                  <div class="attendee-name">Ravi Kumar</div>
+                  <div class="attendee-role">VP Sales · Reports to you</div>
+                  <div class="attendee-context">Has overdue action item</div>
+                </div>
+              </div>
+              <div class="attendee">
+                <div class="attendee-avatar">SC</div>
+                <div class="attendee-info">
+                  <div class="attendee-name">Sarah Chen</div>
+                  <div class="attendee-role">VP Engineering · Reports to you</div>
+                  <div class="attendee-context">Last 1:1 was Jan 20</div>
+                </div>
+              </div>
+              <div class="attendee">
+                <div class="attendee-avatar">MJ</div>
+                <div class="attendee-info">
+                  <div class="attendee-name">Mike Johnson</div>
+                  <div class="attendee-role">Finance Director · Reports to Priya</div>
+                  <div class="attendee-context">Prepared Q4 model</div>
+                </div>
+              </div>
+              <div class="attendee">
+                <div class="attendee-avatar">LP</div>
+                <div class="attendee-info">
+                  <div class="attendee-name">Lisa Park</div>
+                  <div class="attendee-role">VP Marketing · Reports to you</div>
+                  <div class="attendee-context">Requesting budget increase</div>
+                </div>
+              </div>
+              <div class="attendee">
+                <div class="attendee-avatar">TW</div>
+                <div class="attendee-info">
+                  <div class="attendee-name">Tom Williams</div>
+                  <div class="attendee-role">Head of Operations · Reports to you</div>
+                  <div class="attendee-context">New in role (3 months)</div>
+                </div>
+              </div>
+              <div class="attendee">
+                <div class="attendee-avatar" style="background: linear-gradient(135deg, #10b981, #059669);">AK</div>
+                <div class="attendee-info">
+                  <div class="attendee-name">You (Arun Kumar)</div>
+                  <div class="attendee-role">CEO · Meeting Host</div>
+                  <div class="attendee-context">Organized this series</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- From Last Meeting -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom: 16px;">From Last Meeting (Jan 20)</div>
+            <div class="context-item">
+              <div class="context-dot" style="background: #10b981;"></div>
+              <div>
+                <div class="context-text"><strong>Decision:</strong> Focus on enterprise segment ($100K+ deals), pause SMB outbound until Q2</div>
+                <div class="context-meta">Unanimous agreement · You made the final call</div>
+              </div>
+            </div>
+            <div class="context-item">
+              <div class="context-dot" style="background: #10b981;"></div>
+              <div>
+                <div class="context-text"><strong>Decision:</strong> Hire 2 additional enterprise AEs, promote internally for SMB lead</div>
+                <div class="context-meta">Budget approved by Priya · Ravi to execute</div>
+              </div>
+            </div>
+            <div class="context-item">
+              <div class="context-dot" style="background: #ef4444;"></div>
+              <div>
+                <div class="context-text"><strong>Action (Overdue):</strong> Ravi to provide revised Q4 forecast reflecting enterprise focus</div>
+                <div class="context-meta" style="color: #ef4444; font-weight: 500;">⚠️ Due Jan 24 · Not yet received · Follow up recommended</div>
+              </div>
+            </div>
+            <div class="context-item">
+              <div class="context-dot" style="background: #3b82f6;"></div>
+              <div>
+                <div class="context-text"><strong>Metric:</strong> Q3 closed at $4.2M (108% of target). Q4 target is $5.5M.</div>
+                <div class="context-meta">From Q3 Final Report · Current pipeline: $8.1M (1.47x coverage)</div>
+              </div>
+            </div>
+            <div class="context-item">
+              <div class="context-dot" style="background: #f59e0b;"></div>
+              <div>
+                <div class="context-text"><strong>Risk Flagged:</strong> TechFlow deal ($450K) has procurement delays - may slip to Q1</div>
+                <div class="context-meta">Ravi mentioned legal review taking longer than expected</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Relevant Documents -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom: 16px;">Relevant Documents (Updated This Week)</div>
+            <div class="doc-item">
+              <div class="doc-left">
+                <span class="doc-icon">📊</span>
+                <div>
+                  <div class="doc-name">Q4 Pipeline Model v2.xlsx</div>
+                  <div class="doc-updated">Updated yesterday by Ravi · 12 sheets · Key changes to Stage 3 deals</div>
+                </div>
+              </div>
+              <span style="color: var(--text-muted);">↗️</span>
+            </div>
+            <div class="doc-item">
+              <div class="doc-left">
+                <span class="doc-icon">📄</span>
+                <div>
+                  <div class="doc-name">Enterprise Target Account List.docx</div>
+                  <div class="doc-updated">Updated 2 days ago by Ravi · 47 accounts · 12 new additions</div>
+                </div>
+              </div>
+              <span style="color: var(--text-muted);">↗️</span>
+            </div>
+            <div class="doc-item">
+              <div class="doc-left">
+                <span class="doc-icon">📑</span>
+                <div>
+                  <div class="doc-name">Competitive Win-Loss Analysis Q3.pptx</div>
+                  <div class="doc-updated">Updated 3 days ago by Lisa · 24 slides · Win rate: 34%</div>
+                </div>
+              </div>
+              <span style="color: var(--text-muted);">↗️</span>
+            </div>
+            <div class="doc-item">
+              <div class="doc-left">
+                <span class="doc-icon">📈</span>
+                <div>
+                  <div class="doc-name">Sales Compensation Plan 2026.pdf</div>
+                  <div class="doc-updated">Shared 4 days ago by Priya · Pending your review</div>
+                </div>
+              </div>
+              <span style="color: var(--text-muted);">↗️</span>
+            </div>
+          </div>
+          
+          <!-- Recent Email Threads -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom: 16px;">Related Email Threads</div>
+            <div class="context-item">
+              <div class="context-dot" style="background: #3b82f6;"></div>
+              <div>
+                <div class="context-text"><strong>Re: Acme Corp Enterprise Deal</strong></div>
+                <div class="context-meta">From Ravi · "They've confirmed budget, need exec sponsor call. Can you join Thursday?" · Yesterday</div>
+              </div>
+            </div>
+            <div class="context-item">
+              <div class="context-dot" style="background: #f59e0b;"></div>
+              <div>
+                <div class="context-text"><strong>FW: TechFlow Procurement Update</strong></div>
+                <div class="context-meta">From Ravi · "Legal asking for additional security questionnaire. 2 week delay likely." · 2 days ago</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Suggested Topics -->
+          <div class="suggestion-box">
+            <div class="suggestion-title">
+              <span>🧠</span>
+              Suggested Topics & Questions
+            </div>
+            <div class="suggestion-item" onclick="copyToChat('What is the status of the revised Q4 forecast from Ravi?')">
+              <span>›</span>
+              <span>Follow up on Ravi's overdue forecast - what's blocking delivery?</span>
+            </div>
+            <div class="suggestion-item" onclick="copyToChat('What is the current pipeline coverage for Q4?')">
+              <span>›</span>
+              <span>Pipeline coverage is 1.47x - is this sufficient given enterprise focus?</span>
+            </div>
+            <div class="suggestion-item" onclick="copyToChat('What is the risk assessment for TechFlow deal?')">
+              <span>›</span>
+              <span>TechFlow slip risk - what's the impact on Q4 if it moves to Q1?</span>
+            </div>
+            <div class="suggestion-item" onclick="copyToChat('Show me the enterprise hiring plan')">
+              <span>›</span>
+              <span>Enterprise AE hiring - timeline and candidate pipeline status?</span>
+            </div>
+            <div class="suggestion-item" onclick="copyToChat('Compare this month pipeline vs last month')">
+              <span>›</span>
+              <span>How has pipeline changed since pivoting to enterprise focus?</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- ==================== POST-MEETING SUMMARY VIEW ==================== -->
+        <div id="summary-view" style="display: none;" class="animate-fadeIn">
+          <div class="back-link" onclick="showView('dashboard')">← Back to Dashboard</div>
+          
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+            <div>
+              <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">Meeting Summary</h2>
+              <p style="color: var(--text-secondary);">Q4 Pipeline Review · Jan 27, 9:00 AM · Duration: 58 min</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-secondary">✏️ Edit</button>
+              <button class="btn btn-primary">📤 Share to Attendees</button>
+            </div>
+          </div>
+          
+          <!-- Key Discussions -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom: 16px;">Key Discussion Points</div>
+            <div style="color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
+              <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">Pipeline Status:</strong> Current pipeline stands at $8.1M against Q4 target of $5.5M (1.47x coverage). However, $2.3M is in early stages with low conversion probability.</p>
+              <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">Enterprise Deals:</strong> Three major deals in final stages - Acme Corp ($800K, 90% probability), TechFlow ($450K, 60% - delayed), and GlobalSys ($600K, 75% probability).</p>
+              <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">Marketing Request:</strong> Lisa presented case for 15% budget increase ($180K) for Q1 demand generation campaign targeting enterprise segment. ROI projection: 4.2x based on Q3 data.</p>
+              <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">Resource Constraints:</strong> Sarah flagged that custom integration requests from enterprise deals are stretching engineering capacity. Current backlog: 6 weeks.</p>
+              <p><strong style="color: var(--text-primary);">Hiring Update:</strong> 2 enterprise AE roles posted, 12 applicants in pipeline. Target start date: Feb 15 for first hire.</p>
+            </div>
+          </div>
+          
+          <!-- Decisions Made -->
+          <div class="decision-box">
+            <div class="decision-title">
+              <span>✅</span>
+              Decisions Made (3)
+            </div>
+            <div class="context-item" style="background: var(--bg-hover);">
+              <div class="context-dot" style="background: #10b981;"></div>
+              <div>
+                <div class="context-text"><strong>Approved:</strong> 15% marketing budget increase for Q1 ($180K additional)</div>
+                <div class="context-meta">Condition: Final sign-off from Priya by EOD Wednesday. Focus on enterprise demand gen only.</div>
+              </div>
+            </div>
+            <div class="context-item" style="background: var(--bg-hover);">
+              <div class="context-dot" style="background: #10b981;"></div>
+              <div>
+                <div class="context-text"><strong>Decided:</strong> Prioritize Acme Corp and GlobalSys deals, deprioritize TechFlow until legal clears</div>
+                <div class="context-meta">TechFlow moved to Q1 forecast. Ravi to communicate timeline expectations to TechFlow.</div>
+              </div>
+            </div>
+            <div class="context-item" style="background: var(--bg-hover);">
+              <div class="context-dot" style="background: #10b981;"></div>
+              <div>
+                <div class="context-text"><strong>Decided:</strong> Hire 1 contractor for integration work to reduce backlog</div>
+                <div class="context-meta">Sarah to source through preferred vendor. Budget: $25K/month for 3 months.</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Action Items -->
+          <div class="action-box">
+            <div class="action-box-title">
+              <span>⚡</span>
+              Action Items (6)
+            </div>
+            <div class="action-item" style="background: var(--bg-hover);">
+              <div class="action-left">
+                <div class="action-dot green"></div>
+                <div class="action-content">
+                  <div class="action-title">Schedule executive sponsor call with Acme Corp CEO</div>
+                  <div class="action-meta">Owner: You (Arun) · Due: Jan 29 · High confidence</div>
+                </div>
+              </div>
+            </div>
+            <div class="action-item" style="background: var(--bg-hover);">
+              <div class="action-left">
+                <div class="action-dot green"></div>
+                <div class="action-content">
+                  <div class="action-title">Prepare revised Q4 forecast reflecting TechFlow move to Q1</div>
+                  <div class="action-meta">Owner: Ravi Kumar · Due: Jan 28 EOD · High confidence</div>
+                </div>
+              </div>
+            </div>
+            <div class="action-item" style="background: var(--bg-hover);">
+              <div class="action-left">
+                <div class="action-dot green"></div>
+                <div class="action-content">
+                  <div class="action-title">Submit marketing budget approval to Finance</div>
+                  <div class="action-meta">Owner: Lisa Park · Due: Jan 28 · High confidence</div>
+                </div>
+              </div>
+            </div>
+            <div class="action-item" style="background: var(--bg-hover);">
+              <div class="action-left">
+                <div class="action-dot green"></div>
+                <div class="action-content">
+                  <div class="action-title">Source integration contractor through vendor network</div>
+                  <div class="action-meta">Owner: Sarah Chen · Due: Jan 31 · High confidence</div>
+                </div>
+              </div>
+            </div>
+            <div class="action-item" style="background: var(--bg-hover);">
+              <div class="action-left">
+                <div class="action-dot yellow"></div>
+                <div class="action-content">
+                  <div class="action-title">Communicate Q1 timeline to TechFlow procurement team</div>
+                  <div class="action-meta">Owner: Ravi Kumar · Due: Jan 29 · Medium confidence (implicit)</div>
+                </div>
+              </div>
+            </div>
+            <div class="action-item" style="background: var(--bg-hover);">
+              <div class="action-left">
+                <div class="action-dot yellow"></div>
+                <div class="action-content">
+                  <div class="action-title">Prepare GlobalSys technical requirements document</div>
+                  <div class="action-meta">Owner: Tom Williams · Due: Feb 3 · Medium confidence (implicit)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Open Questions -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom: 16px;">Open Questions (3)</div>
+            <div style="color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
+              <div style="margin-bottom: 12px; padding: 12px; background: var(--bg-hover); border-radius: 8px;">
+                <strong style="color: var(--text-primary);">1.</strong> What's the contingency plan if both TechFlow AND GlobalSys slip to Q1?
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Raised by Mike · Needs follow-up analysis</div>
+              </div>
+              <div style="margin-bottom: 12px; padding: 12px; background: var(--bg-hover); border-radius: 8px;">
+                <strong style="color: var(--text-primary);">2.</strong> Should we increase enterprise AE hiring to 3 given pipeline growth?
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Raised by Ravi · Deferred to next week's review</div>
+              </div>
+              <div style="padding: 12px; background: var(--bg-hover); border-radius: 8px;">
+                <strong style="color: var(--text-primary);">3.</strong> Can contractors access our codebase for integration work?
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Raised by Sarah · Needs Legal/Security review</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Conflict Detection -->
+          <div class="conflict-box">
+            <div class="conflict-title">
+              <span>⚠️</span>
+              Potential Conflict Detected
+            </div>
+            <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.6;">
+              Today's decision to <strong style="color: var(--text-primary);">deprioritize TechFlow</strong> appears to conflict with the Jan 20 decision to <strong style="color: var(--text-primary);">"pursue all three enterprise deals aggressively"</strong> and the commitment to TechFlow's procurement team for a February close.
+              <br><br>
+              <span style="color: #3b82f6; cursor: pointer;">📄 View Jan 20 meeting summary →</span>
+            </p>
+          </div>
+          
+          <!-- Meeting Stats -->
+          <div class="card" style="margin-top: 16px;">
+            <div class="card-title" style="margin-bottom: 16px;">Meeting Analytics</div>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; text-align: center;">
+              <div>
+                <div style="font-size: 24px; font-weight: 700; color: var(--text-primary);">58 min</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Duration</div>
+              </div>
+              <div>
+                <div style="font-size: 24px; font-weight: 700; color: var(--text-primary);">6</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Participants</div>
+              </div>
+              <div>
+                <div style="font-size: 24px; font-weight: 700; color: #10b981;">3</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Decisions</div>
+              </div>
+              <div>
+                <div style="font-size: 24px; font-weight: 700; color: #f59e0b;">6</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Actions</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- ==================== CHAT VIEW ==================== -->
+        <div id="chat-view" style="display: none; height: calc(100vh - 112px);" class="animate-fadeIn">
+          <div class="chat-container" style="max-width: 900px; margin: 0 auto; height: 100%;">
+            <div class="chat-messages" id="chat-messages">
+              <div class="chat-empty" id="chat-empty">
+                <div class="chat-empty-icon">🧠</div>
+                <h3>Your Executive AI Companion</h3>
+                <p>Ask me anything about your meetings, documents, commitments, or projects. I have access to your calendar, emails, Teams chats, and SharePoint documents.</p>
+                <div class="chat-suggestions">
+                  <button class="chat-suggestion" onclick="sendSuggestion('What needs my attention today?')">What needs my attention today?</button>
+                  <button class="chat-suggestion" onclick="sendSuggestion('What has Ravi committed to this month?')">What has Ravi committed to this month?</button>
+                  <button class="chat-suggestion" onclick="sendSuggestion('Give me the status on Project Nexus')">Give me the status on Project Nexus</button>
+                  <button class="chat-suggestion" onclick="sendSuggestion('Summarize my week so far')">Summarize my week so far</button>
+                  <button class="chat-suggestion" onclick="sendSuggestion('What decisions did we make about Q4 pipeline?')">What decisions did we make about Q4 pipeline?</button>
+                </div>
+              </div>
+            </div>
+            <div class="chat-input-area">
+              <div class="chat-input-box">
+                <input type="text" id="chat-input" placeholder="Ask anything about your meetings, docs, or projects..." onkeypress="handleKeyPress(event)">
+                <button class="chat-btn">🎤</button>
+                <button class="chat-btn send" onclick="sendMessage()">📤</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- ==================== ACTIONS VIEW ==================== -->
+        <div id="actions-view" style="display: none;" class="animate-fadeIn">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div>
+              <h2 style="font-size: 24px; font-weight: 600; color: var(--text-primary);">Action Items</h2>
+              <p style="color: var(--text-secondary);">18 open · 3 overdue · 42 completed this month</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <select style="background: var(--bg-input); color: var(--text-primary); padding: 10px 16px; border-radius: 10px; border: 1px solid var(--border-secondary);">
+                <option>All Status</option>
+                <option>Open</option>
+                <option>Overdue</option>
+                <option>In Progress</option>
+                <option>Completed</option>
+              </select>
+              <select style="background: var(--bg-input); color: var(--text-primary); padding: 10px 16px; border-radius: 10px; border: 1px solid var(--border-secondary);">
+                <option>All Owners</option>
+                <option>Assigned to Me</option>
+                <option>Assigned by Me</option>
+                <option>My Direct Reports</option>
+              </select>
+              <select style="background: var(--bg-input); color: var(--text-primary); padding: 10px 16px; border-radius: 10px; border: 1px solid var(--border-secondary);">
+                <option>All Sources</option>
+                <option>Pipeline Review</option>
+                <option>Board Meetings</option>
+                <option>1:1s</option>
+              </select>
+            </div>
+          </div>
+          
+          <!-- Overdue Section -->
+          <div class="card" style="border-color: rgba(239, 68, 68, 0.3);">
+            <div class="card-title" style="color: #ef4444; margin-bottom: 16px;">⚠️ Overdue (3)</div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot red"></div>
+                <div class="action-content">
+                  <div class="action-title">Review and approve Q4 revised forecast</div>
+                  <div class="action-meta">Owner: Ravi Kumar · Due: Jan 24 (3 days overdue)</div>
+                  <div class="action-meta">Source: Pipeline Review - Jan 20 · <span style="color: #3b82f6; cursor: pointer;">View meeting →</span></div>
+                </div>
+              </div>
+              <span class="tag tag-red">3 days overdue</span>
+            </div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot red"></div>
+                <div class="action-content">
+                  <div class="action-title">Complete security questionnaire for TechFlow</div>
+                  <div class="action-meta">Owner: Sarah Chen · Due: Jan 25 (2 days overdue)</div>
+                  <div class="action-meta">Source: Email thread with TechFlow · <span style="color: #3b82f6; cursor: pointer;">View email →</span></div>
+                </div>
+              </div>
+              <span class="tag tag-red">2 days overdue</span>
+            </div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot red"></div>
+                <div class="action-content">
+                  <div class="action-title">Send customer reference list to GlobalSys</div>
+                  <div class="action-meta">Owner: Tom Williams · Due: Jan 26 (1 day overdue)</div>
+                  <div class="action-meta">Source: Sales Sync - Jan 22 · <span style="color: #3b82f6; cursor: pointer;">View meeting →</span></div>
+                </div>
+              </div>
+              <span class="tag tag-red">1 day overdue</span>
+            </div>
+          </div>
+          
+          <!-- Due Today/Tomorrow -->
+          <div class="card">
+            <div class="card-title" style="color: #f59e0b; margin-bottom: 16px;">📅 Due Soon</div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot yellow"></div>
+                <div class="action-content">
+                  <div class="action-title">Sign off on Series C term sheet amendments</div>
+                  <div class="action-meta">Owner: You · Due: Today EOD</div>
+                  <div class="action-meta">Source: Board Meeting - Jan 20</div>
+                </div>
+              </div>
+              <span class="tag tag-yellow">Due today</span>
+            </div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot yellow"></div>
+                <div class="action-content">
+                  <div class="action-title">Approve marketing budget increase (15%)</div>
+                  <div class="action-meta">Owner: You · Due: Tomorrow</div>
+                  <div class="action-meta">Source: Budget Review - Jan 23</div>
+                </div>
+              </div>
+              <span class="tag tag-yellow">Due tomorrow</span>
+            </div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot yellow"></div>
+                <div class="action-content">
+                  <div class="action-title">Prepare revised Q4 forecast (TechFlow adjusted)</div>
+                  <div class="action-meta">Owner: Ravi Kumar · Due: Jan 28</div>
+                  <div class="action-meta">Source: Pipeline Review - Jan 27</div>
+                </div>
+              </div>
+              <span class="tag tag-yellow">Due in 1 day</span>
+            </div>
+          </div>
+          
+          <!-- In Progress -->
+          <div class="card">
+            <div class="card-title" style="color: #3b82f6; margin-bottom: 16px;">🔄 In Progress (5)</div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot blue"></div>
+                <div class="action-content">
+                  <div class="action-title">Schedule executive sponsor call with Acme Corp CEO</div>
+                  <div class="action-meta">Owner: You · Due: Jan 29 · EA coordinating calendars</div>
+                  <div class="action-meta">Source: Pipeline Review - Jan 27</div>
+                </div>
+              </div>
+              <span class="tag tag-blue">In progress</span>
+            </div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot blue"></div>
+                <div class="action-content">
+                  <div class="action-title">Source integration contractor through vendor network</div>
+                  <div class="action-meta">Owner: Sarah Chen · Due: Jan 31 · 3 candidates identified</div>
+                  <div class="action-meta">Source: Pipeline Review - Jan 27</div>
+                </div>
+              </div>
+              <span class="tag tag-blue">In progress</span>
+            </div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot blue"></div>
+                <div class="action-content">
+                  <div class="action-title">Finalize Q1 hiring plan for engineering</div>
+                  <div class="action-meta">Owner: Sarah Chen · Due: Feb 1 · Draft under review</div>
+                  <div class="action-meta">Source: 1:1 with Sarah - Jan 20</div>
+                </div>
+              </div>
+              <span class="tag tag-blue">In progress</span>
+            </div>
+          </div>
+          
+          <!-- Upcoming -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom: 16px;">📋 Upcoming (7)</div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot green"></div>
+                <div class="action-content">
+                  <div class="action-title">Review board deck final version</div>
+                  <div class="action-meta">Owner: You · Due: Feb 1</div>
+                  <div class="action-meta">Source: Board Prep - Jan 27</div>
+                </div>
+              </div>
+              <span class="tag tag-green">On track</span>
+            </div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot green"></div>
+                <div class="action-content">
+                  <div class="action-title">Prepare GlobalSys technical requirements document</div>
+                  <div class="action-meta">Owner: Tom Williams · Due: Feb 3</div>
+                  <div class="action-meta">Source: Pipeline Review - Jan 27</div>
+                </div>
+              </div>
+              <span class="tag tag-green">On track</span>
+            </div>
+            <div class="action-item">
+              <div class="action-left">
+                <div class="action-dot green"></div>
+                <div class="action-content">
+                  <div class="action-title">Present marketing campaign performance to board</div>
+                  <div class="action-meta">Owner: Lisa Park · Due: Feb 5</div>
+                  <div class="action-meta">Source: Marketing Review - Jan 22</div>
+                </div>
+              </div>
+              <span class="tag tag-green">On track</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- ==================== DOCUMENTS VIEW ==================== -->
+        <div id="documents-view" style="display: none;" class="animate-fadeIn">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div>
+              <h2 style="font-size: 24px; font-weight: 600; color: var(--text-primary);">Documents</h2>
+              <p style="color: var(--text-secondary);">Recently accessed and relevant documents from SharePoint & OneDrive</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <select style="background: var(--bg-input); color: var(--text-primary); padding: 10px 16px; border-radius: 10px; border: 1px solid var(--border-secondary);">
+                <option>All Types</option>
+                <option>Presentations</option>
+                <option>Spreadsheets</option>
+                <option>Documents</option>
+                <option>PDFs</option>
+              </select>
+              <select style="background: var(--bg-input); color: var(--text-primary); padding: 10px 16px; border-radius: 10px; border: 1px solid var(--border-secondary);">
+                <option>Recently Updated</option>
+                <option>Most Relevant</option>
+                <option>Shared with Me</option>
+              </select>
+            </div>
+          </div>
+          
+          <!-- Needs Review -->
+          <div class="card" style="border-color: rgba(139, 92, 246, 0.3);">
+            <div class="card-title" style="color: #8b5cf6; margin-bottom: 16px;">📌 Needs Your Review (7)</div>
+            <div class="doc-card">
+              <div class="doc-card-icon">📊</div>
+              <div class="doc-card-info">
+                <div class="doc-card-name">Board Deck Q4 2025 v3.pptx</div>
+                <div class="doc-card-meta">Updated 2 hours ago by Priya Sharma · 47 slides · Shared for your review</div>
+              </div>
+              <span class="tag tag-red">High Priority</span>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-icon">📄</div>
+              <div class="doc-card-info">
+                <div class="doc-card-name">Series C Term Sheet - Amended.pdf</div>
+                <div class="doc-card-meta">Shared yesterday by Legal · 12 pages · Signature required</div>
+              </div>
+              <span class="tag tag-red">Action Required</span>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-icon">📈</div>
+              <div class="doc-card-info">
+                <div class="doc-card-name">Sales Compensation Plan 2026.pdf</div>
+                <div class="doc-card-meta">Shared 4 days ago by Priya Sharma · 8 pages · Approval needed</div>
+              </div>
+              <span class="tag tag-yellow">Pending Review</span>
+            </div>
+          </div>
+          
+          <!-- Recently Updated -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom: 16px;">Recently Updated</div>
+            <div class="doc-card">
+              <div class="doc-card-icon">📊</div>
+              <div class="doc-card-info">
+                <div class="doc-card-name">Q4 Pipeline Model v2.xlsx</div>
+                <div class="doc-card-meta">Updated yesterday by Ravi Kumar · 12 sheets · Sales/Pipeline folder</div>
+              </div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-icon">📄</div>
+              <div class="doc-card-info">
+                <div class="doc-card-name">Enterprise Target Account List.docx</div>
+                <div class="doc-card-meta">Updated 2 days ago by Ravi Kumar · 47 accounts · Sales/Accounts folder</div>
+              </div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-icon">📑</div>
+              <div class="doc-card-info">
+                <div class="doc-card-name">Competitive Win-Loss Analysis Q3.pptx</div>
+                <div class="doc-card-meta">Updated 3 days ago by Lisa Park · 24 slides · Marketing folder</div>
+              </div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-icon">📄</div>
+              <div class="doc-card-info">
+                <div class="doc-card-name">Q1 Engineering Hiring Plan.docx</div>
+                <div class="doc-card-meta">Updated 4 days ago by Sarah Chen · Draft · Engineering folder</div>
+              </div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-icon">📊</div>
+              <div class="doc-card-info">
+                <div class="doc-card-name">Monthly KPI Dashboard - Jan 2026.xlsx</div>
+                <div class="doc-card-meta">Updated 5 days ago by Mike Johnson · Finance folder</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Meeting Documents -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom: 16px;">Related to Today's Meetings</div>
+            <div class="doc-card">
+              <div class="doc-card-icon">📋</div>
+              <div class="doc-card-info">
+                <div class="doc-card-name">Q4 Pipeline Review - Agenda.docx</div>
+                <div class="doc-card-meta">For: 9:00 AM meeting · Created by you</div>
+              </div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-icon">📊</div>
+              <div class="doc-card-info">
+                <div class="doc-card-name">Product Roadmap Q1-Q2 2026.pptx</div>
+                <div class="doc-card-meta">For: 12:00 PM meeting · Updated by Product team</div>
+              </div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-icon">📄</div>
+              <div class="doc-card-info">
+                <div class="doc-card-name">Customer Success Weekly Metrics.xlsx</div>
+                <div class="doc-card-meta">For: 4:00 PM meeting · Auto-updated dashboard</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- ==================== INSIGHTS VIEW ==================== -->
+        <div id="insights-view" style="display: none;" class="animate-fadeIn">
+          <div class="page-header">
+            <h1>Insights</h1>
+            <p>AI-generated patterns and observations from your meetings and communications</p>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+            <div class="insight-card">
+              <div class="insight-header">
+                <div class="insight-icon" style="background: rgba(239, 68, 68, 0.2);">⏰</div>
+                <div>
+                  <div class="insight-title">Meeting Time Analysis</div>
+                  <div class="insight-subtitle">Last 30 days</div>
+                </div>
+              </div>
+              <div class="insight-metric">32 hrs/week</div>
+              <div class="insight-content">
+                You spend 32 hours/week in meetings, up 15% from last month. 45% are recurring, 30% are 1:1s. Consider delegating recurring ops reviews to direct reports.
+              </div>
+            </div>
+            
+            <div class="insight-card">
+              <div class="insight-header">
+                <div class="insight-icon" style="background: rgba(245, 158, 11, 0.2);">📋</div>
+                <div>
+                  <div class="insight-title">Action Item Completion</div>
+                  <div class="insight-subtitle">Last 30 days</div>
+                </div>
+              </div>
+              <div class="insight-metric">73%</div>
+              <div class="insight-content">
+                73% of action items are completed on time, down from 82% last month. Sales team has highest overdue rate (35%). Engineering is at 95% completion.
+              </div>
+            </div>
+            
+            <div class="insight-card">
+              <div class="insight-header">
+                <div class="insight-icon" style="background: rgba(16, 185, 129, 0.2);">✅</div>
+                <div>
+                  <div class="insight-title">Decision Velocity</div>
+                  <div class="insight-subtitle">Last 30 days</div>
+                </div>
+              </div>
+              <div class="insight-metric">4.2 days</div>
+              <div class="insight-content">
+                Average time from decision request to resolution is 4.2 days. Budget decisions take longest (7.3 days). Hiring decisions are fastest (2.1 days).
+              </div>
+            </div>
+            
+            <div class="insight-card">
+              <div class="insight-header">
+                <div class="insight-icon" style="background: rgba(59, 130, 246, 0.2);">👥</div>
+                <div>
+                  <div class="insight-title">Collaboration Patterns</div>
+                  <div class="insight-subtitle">Last 30 days</div>
+                </div>
+              </div>
+              <div class="insight-metric">8 people</div>
+              <div class="insight-content">
+                You interact most frequently with Ravi Kumar (Sales), Sarah Chen (Eng), and Priya Sharma (Finance). Consider scheduling more time with Lisa Park (Marketing) - last 1:1 was 3 weeks ago.
+              </div>
+            </div>
+          </div>
+          
+          <div class="card" style="margin-top: 16px;">
+            <div class="card-title" style="margin-bottom: 16px;">🔍 Notable Patterns</div>
+            <div class="context-item">
+              <div class="context-dot" style="background: #f59e0b;"></div>
+              <div>
+                <div class="context-text"><strong>Recurring Topic:</strong> "Engineering capacity" mentioned in 8 meetings this month</div>
+                <div class="context-meta">Consider dedicated capacity planning session</div>
+              </div>
+            </div>
+            <div class="context-item">
+              <div class="context-dot" style="background: #3b82f6;"></div>
+              <div>
+                <div class="context-text"><strong>Decision Reversal:</strong> 2 decisions from December were revisited this month</div>
+                <div class="context-meta">Both related to Q4 pipeline strategy</div>
+              </div>
+            </div>
+            <div class="context-item">
+              <div class="context-dot" style="background: #10b981;"></div>
+              <div>
+                <div class="context-text"><strong>Positive Trend:</strong> Meeting duration down 12% vs last month</div>
+                <div class="context-meta">More meetings ending early or on time</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- ==================== WEEKLY DIGEST VIEW ==================== -->
+        <div id="digest-view" style="display: none;" class="animate-fadeIn">
+          <div class="page-header">
+            <h1>Weekly Digest</h1>
+            <p>Week of January 20-26, 2026</p>
+          </div>
+          
+          <div class="card">
+            <div class="digest-section">
+              <div class="digest-title">📅 Meetings Summary</div>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;">
+                <div style="text-align: center; padding: 16px; background: var(--bg-hover); border-radius: 12px;">
+                  <div style="font-size: 28px; font-weight: 700; color: var(--text-primary);">24</div>
+                  <div style="font-size: 13px; color: var(--text-muted);">Total Meetings</div>
+                </div>
+                <div style="text-align: center; padding: 16px; background: var(--bg-hover); border-radius: 12px;">
+                  <div style="font-size: 28px; font-weight: 700; color: var(--text-primary);">18.5 hrs</div>
+                  <div style="font-size: 13px; color: var(--text-muted);">Time in Meetings</div>
+                </div>
+                <div style="text-align: center; padding: 16px; background: var(--bg-hover); border-radius: 12px;">
+                  <div style="font-size: 28px; font-weight: 700; color: #10b981;">12</div>
+                  <div style="font-size: 13px; color: var(--text-muted);">Decisions Made</div>
+                </div>
+                <div style="text-align: center; padding: 16px; background: var(--bg-hover); border-radius: 12px;">
+                  <div style="font-size: 28px; font-weight: 700; color: #f59e0b;">28</div>
+                  <div style="font-size: 13px; color: var(--text-muted);">Actions Created</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="digest-section">
+              <div class="digest-title">✅ Key Decisions This Week</div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #10b981;"></div>
+                <div>
+                  <div class="context-text">Approved pivot to enterprise-only sales focus for Q4</div>
+                  <div class="context-meta">Pipeline Review · Jan 20</div>
+                </div>
+              </div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #10b981;"></div>
+                <div>
+                  <div class="context-text">Approved 15% marketing budget increase for Q1</div>
+                  <div class="context-meta">Budget Review · Jan 23</div>
+                </div>
+              </div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #10b981;"></div>
+                <div>
+                  <div class="context-text">Decided to hire 2 enterprise AEs, promote internally for SMB</div>
+                  <div class="context-meta">Pipeline Review · Jan 20</div>
+                </div>
+              </div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #10b981;"></div>
+                <div>
+                  <div class="context-text">Approved contractor hire for integration backlog</div>
+                  <div class="context-meta">Eng Review · Jan 24</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="digest-section">
+              <div class="digest-title">⚠️ Items Needing Follow-up</div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #ef4444;"></div>
+                <div>
+                  <div class="context-text">Ravi's Q4 forecast still not received (due Jan 24)</div>
+                  <div class="context-meta">3 days overdue · Follow up recommended</div>
+                </div>
+              </div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #f59e0b;"></div>
+                <div>
+                  <div class="context-text">TechFlow deal risk - procurement delays ongoing</div>
+                  <div class="context-meta">May slip to Q1 · Decision pending</div>
+                </div>
+              </div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #f59e0b;"></div>
+                <div>
+                  <div class="context-text">Board deck needs final review before Feb 5 meeting</div>
+                  <div class="context-meta">47 pages · High priority</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="digest-section">
+              <div class="digest-title">📈 Project Updates</div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #10b981;"></div>
+                <div>
+                  <div class="context-text"><strong>Project Nexus:</strong> Phase 2 at 70% completion. On track for Feb 22 delivery.</div>
+                  <div class="context-meta">Owner: Sarah Chen</div>
+                </div>
+              </div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #f59e0b;"></div>
+                <div>
+                  <div class="context-text"><strong>Q4 Pipeline:</strong> $8.1M current vs $5.5M target. TechFlow at risk.</div>
+                  <div class="context-meta">Owner: Ravi Kumar</div>
+                </div>
+              </div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #10b981;"></div>
+                <div>
+                  <div class="context-text"><strong>Series C:</strong> Term sheet amendments ready for signature.</div>
+                  <div class="context-meta">Owner: Priya Sharma</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="digest-section">
+              <div class="digest-title">👥 People Notes</div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #3b82f6;"></div>
+                <div>
+                  <div class="context-text"><strong>Lisa Park</strong> - Last 1:1 was 3 weeks ago. Consider scheduling.</div>
+                  <div class="context-meta">Marketing initiatives need alignment</div>
+                </div>
+              </div>
+              <div class="context-item">
+                <div class="context-dot" style="background: #3b82f6;"></div>
+                <div>
+                  <div class="context-text"><strong>Tom Williams</strong> - Completing 90 days in role next week.</div>
+                  <div class="context-meta">Schedule performance check-in</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- ==================== MEETINGS LIST VIEW ==================== -->
+        <div id="meetings-view" style="display: none;" class="animate-fadeIn">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div>
+              <h2 style="font-size: 24px; font-weight: 600; color: var(--text-primary);">Meetings</h2>
+              <p style="color: var(--text-secondary);">This week: 24 meetings · 18.5 hours</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-secondary">Today</button>
+              <button class="btn btn-secondary">This Week</button>
+              <button class="btn btn-secondary">This Month</button>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="card-title" style="margin-bottom: 16px;">Today - Monday, Jan 27</div>
+            <div class="meeting-item" onclick="showView('brief')">
+              <div class="meeting-left">
+                <div class="meeting-time">9:00 AM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">Q4 Pipeline Review</div>
+                  <div class="meeting-attendees">6 attendees · Conf Room A · 60 min</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-green">Brief Ready</span>
+                <a class="btn-join-progress" onclick="event.stopPropagation();" href="#" title="Join — In Progress">🔴 In Progress · Join</a>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+            <div class="meeting-item" onclick="showView('brief')">
+              <div class="meeting-left">
+                <div class="meeting-time">10:30 AM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">1:1 with Priya Sharma (CFO)</div>
+                  <div class="meeting-attendees">Your Office · 30 min</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-green">Brief Ready</span>
+                <a class="btn-join pulse" onclick="event.stopPropagation();" href="#" title="Join Teams Meeting">📞 Join Now</a>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+            <div class="meeting-item" onclick="showView('brief')">
+              <div class="meeting-left">
+                <div class="meeting-time">12:00 PM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">Product Roadmap Quarterly Review</div>
+                  <div class="meeting-attendees">8 attendees · Teams · 90 min</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-green">Brief Ready</span>
+                <span class="btn-join-soon">⏱️ In 1h 30m</span>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+            <div class="meeting-item" onclick="showView('brief')">
+              <div class="meeting-left">
+                <div class="meeting-time">2:30 PM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">Board Deck Review</div>
+                  <div class="meeting-attendees">5 attendees · Exec Boardroom · 60 min</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-red">High Priority</span>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="card-title" style="margin-bottom: 16px;">Tomorrow - Tuesday, Jan 28</div>
+            <div class="meeting-item">
+              <div class="meeting-left">
+                <div class="meeting-time">9:00 AM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">Leadership Team Weekly</div>
+                  <div class="meeting-attendees">7 attendees · Conf Room A · 60 min</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-blue">Recurring</span>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+            <div class="meeting-item">
+              <div class="meeting-left">
+                <div class="meeting-time">11:00 AM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">Acme Corp Exec Call</div>
+                  <div class="meeting-attendees">External · Teams · 45 min</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-purple">External</span>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+            <div class="meeting-item">
+              <div class="meeting-left">
+                <div class="meeting-time">2:00 PM</div>
+                <div class="meeting-info">
+                  <div class="meeting-title">1:1 with Ravi Kumar (VP Sales)</div>
+                  <div class="meeting-attendees">His Office · 30 min</div>
+                </div>
+              </div>
+              <div class="meeting-right">
+                <span class="tag tag-yellow">Follow-up Needed</span>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Theme management
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme') || 'dark';
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', newTheme);
+      document.getElementById('theme-icon').textContent = newTheme === 'dark' ? '🌙' : '☀️';
+      document.getElementById('theme-label').textContent = newTheme === 'dark' ? 'Dark' : 'Light';
+      localStorage.setItem('theme', newTheme);
+    }
+    
+    // Load saved theme
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.getElementById('theme-icon').textContent = savedTheme === 'dark' ? '🌙' : '☀️';
+    document.getElementById('theme-label').textContent = savedTheme === 'dark' ? 'Dark' : 'Light';
+    
+    // View management
+    function showView(viewName) {
+      // Hide all views
+      const views = ['dashboard', 'brief', 'summary', 'chat', 'actions', 'documents', 'insights', 'digest', 'meetings'];
+      views.forEach(v => {
+        const el = document.getElementById(v + '-view');
+        if (el) el.style.display = 'none';
+      });
+      
+      // Update nav
+      document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+      
+      // Show selected view
+      const viewMap = {
+        'dashboard': 0, 'chat': 1, 'meetings': 2, 'actions': 3, 
+        'documents': 4, 'insights': 5, 'digest': 6
+      };
+      
+      if (viewName === 'brief' || viewName === 'summary') {
+        document.getElementById(viewName + '-view').style.display = 'block';
+        document.querySelectorAll('.nav-item')[2].classList.add('active');
+      } else if (viewName === 'chat') {
+        document.getElementById('chat-view').style.display = 'flex';
+        document.querySelectorAll('.nav-item')[1].classList.add('active');
+      } else {
+        const el = document.getElementById(viewName + '-view');
+        if (el) el.style.display = 'block';
+        if (viewMap[viewName] !== undefined) {
+          document.querySelectorAll('.nav-item')[viewMap[viewName]].classList.add('active');
+        }
+      }
+      
+      // Scroll to top
+      document.querySelector('.content').scrollTop = 0;
+    }
+    
+    // Chat functionality
+    const responses = {
+      'attention': {
+        text: `<strong>🔴 Needs Your Attention Today:</strong><br><br>
+          <strong>OVERDUE (3 days):</strong> Ravi's Q4 forecast - still not received<br>
+          → Recommend: Direct follow-up in your 2pm 1:1<br><br>
+          <strong>DUE TODAY EOD:</strong> Series C term sheet signature<br>
+          → Document ready in SharePoint, 12 pages<br><br>
+          <strong>DUE TOMORROW:</strong> Marketing budget approval (15% increase)<br>
+          → Lisa awaiting your decision, $180K additional<br><br>
+          <strong>PREP REQUIRED:</strong> Board deck review before 2:30pm meeting<br>
+          → 47 pages, updated by Priya 2 hours ago`,
+        sources: ['Action Tracker', 'Calendar', 'SharePoint']
+      },
+      'ravi': {
+        text: `Based on meetings and emails from the past 30 days, <strong>Ravi Kumar</strong> has committed to:<br><br>
+          <strong>1. Revised Q4 forecast</strong> reflecting enterprise focus<br>
+          &nbsp;&nbsp;&nbsp;Due: Jan 24 · <span style="color: #ef4444;">⚠️ OVERDUE (3 days)</span><br>
+          &nbsp;&nbsp;&nbsp;Source: Pipeline Review, Jan 20<br><br>
+          <strong>2. Enterprise AE hiring</strong> - 2 positions<br>
+          &nbsp;&nbsp;&nbsp;Due: Feb 15 (first hire) · On track, 12 candidates<br>
+          &nbsp;&nbsp;&nbsp;Source: Pipeline Review, Jan 20<br><br>
+          <strong>3. Communicate TechFlow timeline change</strong><br>
+          &nbsp;&nbsp;&nbsp;Due: Jan 29 · Not started<br>
+          &nbsp;&nbsp;&nbsp;Source: Pipeline Review, Jan 27<br><br>
+          <strong>4. Weekly pipeline updates</strong><br>
+          &nbsp;&nbsp;&nbsp;Due: Every Friday · Last delivered Jan 24<br>
+          &nbsp;&nbsp;&nbsp;Source: Standing commitment`,
+        sources: ['Pipeline Review - Jan 20', 'Pipeline Review - Jan 27', 'Email thread - Jan 22']
+      },
+      'nexus': {
+        text: `<strong>Project Nexus Status:</strong><br><br>
+          <strong>Overall:</strong> Phase 2 is <strong>70% complete</strong> as of last update (Jan 24)<br><br>
+          <strong>Timeline:</strong><br>
+          • Original deadline: Feb 15<br>
+          • Current projection: <strong>Feb 22</strong> (7 day slip)<br>
+          • Reason: Vendor contract pending legal sign-off<br><br>
+          <strong>Budget:</strong> On track<br>
+          • Spent: $45,000 of $60,000 allocated<br>
+          • No overruns expected<br><br>
+          <strong>Blockers:</strong><br>
+          • ⚠️ Vendor contract - Legal review (Sarah escalated Jan 25)<br>
+          • ⚠️ Integration testing delayed until contract signed<br><br>
+          <strong>Recent Activity:</strong><br>
+          • Sarah mentioned contractor hire approved to help<br>
+          • Technical requirements 90% documented`,
+        sources: ['Project Tracker - Jan 24', 'Eng Review - Jan 24', '1:1 with Sarah - Jan 20']
+      },
+      'week': {
+        text: `<strong>Your Week Summary (Jan 20-26):</strong><br><br>
+          <strong>📅 Meetings:</strong> 24 total (18.5 hours)<br>
+          • 8 recurring, 6 one-on-ones, 10 ad-hoc<br><br>
+          <strong>✅ Decisions Made:</strong> 12<br>
+          • Enterprise sales pivot approved<br>
+          • Marketing budget increase (15%)<br>
+          • 2 enterprise AE hires approved<br>
+          • Integration contractor approved<br><br>
+          <strong>📋 Actions Created:</strong> 28 new items<br>
+          • 18 assigned to direct reports<br>
+          • 6 assigned to you<br>
+          • 4 assigned to others<br><br>
+          <strong>⚠️ Items Overdue:</strong> 3<br>
+          • Ravi's forecast (3 days)<br>
+          • Sarah's security questionnaire (2 days)<br>
+          • Tom's customer references (1 day)<br><br>
+          <strong>📈 Notable:</strong> Pipeline coverage improved to 1.47x`,
+        sources: ['Meeting summaries', 'Action tracker', 'Calendar']
+      },
+      'pipeline': {
+        text: `<strong>Q4 Pipeline Decisions Summary:</strong><br><br>
+          <strong>Jan 20 - Pipeline Review:</strong><br>
+          • ✅ Decided: Focus enterprise segment ($100K+ deals)<br>
+          • ✅ Decided: Pause SMB outbound until Q2<br>
+          • ✅ Decided: Hire 2 enterprise AEs<br><br>
+          <strong>Jan 27 - Pipeline Review:</strong><br>
+          • ✅ Decided: Deprioritize TechFlow (procurement delays)<br>
+          • ✅ Decided: Focus on Acme Corp and GlobalSys<br>
+          • ⚠️ <strong>Note:</strong> This conflicts with Jan 20 decision to "pursue all three deals aggressively"<br><br>
+          <strong>Current Pipeline Status:</strong><br>
+          • Total: $8.1M (vs $5.5M target)<br>
+          • Coverage: 1.47x<br>
+          • At risk: TechFlow ($450K) - likely Q1 slip`,
+        sources: ['Pipeline Review - Jan 20', 'Pipeline Review - Jan 27']
+      },
+      'default': {
+        text: `I searched across your meetings, documents, and communications but need more context. Here are some things I can help with:<br><br>
+          <strong>Try asking:</strong><br>
+          • "What needs my attention today?"<br>
+          • "What has [person] committed to?"<br>
+          • "Status on [project name]?"<br>
+          • "What decisions did we make about [topic]?"<br>
+          • "Summarize my week"<br>
+          • "Find documents about [topic]"<br>
+          • "What's the history with [company/deal]?"`,
+        sources: []
+      }
+    };
+    
+    function sendSuggestion(text) {
+      document.getElementById('chat-input').value = text;
+      sendMessage();
+    }
+    
+    function copyToChat(text) {
+      showView('chat');
+      setTimeout(() => {
+        document.getElementById('chat-input').value = text;
+        document.getElementById('chat-input').focus();
+      }, 100);
+    }
+    
+    function handleKeyPress(e) {
+      if (e.key === 'Enter') sendMessage();
+    }
+    
+    function sendMessage() {
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+      
+      document.getElementById('chat-empty').style.display = 'none';
+      const messagesDiv = document.getElementById('chat-messages');
+      
+      // Add user message
+      const userMsg = document.createElement('div');
+      userMsg.className = 'message user';
+      userMsg.innerHTML = `<div class="message-bubble">${text}</div>`;
+      messagesDiv.appendChild(userMsg);
+      input.value = '';
+      
+      // Determine response
+      setTimeout(() => {
+        let response;
+        const lowerText = text.toLowerCase();
+        
+        if (lowerText.includes('attention') || lowerText.includes('today') || lowerText.includes('urgent')) {
+          response = responses.attention;
+        } else if (lowerText.includes('ravi') || lowerText.includes('commit')) {
+          response = responses.ravi;
+        } else if (lowerText.includes('nexus') || lowerText.includes('project status')) {
+          response = responses.nexus;
+        } else if (lowerText.includes('week') || lowerText.includes('summar')) {
+          response = responses.week;
+        } else if (lowerText.includes('pipeline') || lowerText.includes('decision') || lowerText.includes('q4')) {
+          response = responses.pipeline;
+        } else {
+          response = responses.default;
+        }
+        
+        const aiMsg = document.createElement('div');
+        aiMsg.className = 'message assistant';
+        
+        let sourcesHtml = '';
+        if (response.sources.length > 0) {
+          sourcesHtml = `
+            <div class="message-sources">
+              <div class="message-sources-label">Sources:</div>
+              ${response.sources.map(s => `<span class="message-source">${s}</span>`).join('')}
+            </div>`;
+        }
+        
+        aiMsg.innerHTML = `<div class="message-bubble">${response.text}${sourcesHtml}</div>`;
+        messagesDiv.appendChild(aiMsg);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }, 800);
+    }
+  </script>
+</body>
+</html>

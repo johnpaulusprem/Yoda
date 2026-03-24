@@ -1,0 +1,163 @@
+version: "3.9"
+
+services:
+  # ── Infrastructure ──────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: yoda
+      POSTGRES_PASSWORD: yoda_dev
+      POSTGRES_DB: yoda
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yoda"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Application Services ────────────────────────────────────────
+  meeting-service:
+    build:
+      context: ..
+      dockerfile: services/meeting-service/Dockerfile
+    ports:
+      - "8010:8010"
+    env_file:
+      - ../.env
+    environment:
+      PORT: "8010"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  document-service:
+    build:
+      context: ..
+      dockerfile: services/document-service/Dockerfile
+    ports:
+      - "8011:8011"
+    env_file:
+      - ../.env
+    environment:
+      PORT: "8011"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  chat-service:
+    build:
+      context: ..
+      dockerfile: services/chat-service/Dockerfile
+    ports:
+      - "8012:8012"
+    env_file:
+      - ../.env
+    environment:
+      PORT: "8012"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dashboard-service:
+    build:
+      context: ..
+      dockerfile: services/dashboard-service/Dockerfile
+    ports:
+      - "8013:8013"
+    env_file:
+      - ../.env
+    environment:
+      PORT: "8013"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  pre-meeting-brief-service:
+    build:
+      context: ..
+      dockerfile: services/pre-meeting-brief-service/Dockerfile
+    ports:
+      - "8014:8014"
+    env_file:
+      - ../.env
+    environment:
+      PORT: "8014"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  weekly-digest-service:
+    build:
+      context: ..
+      dockerfile: services/weekly-digest-service/Dockerfile
+    ports:
+      - "8015:8015"
+    env_file:
+      - ../.env
+    environment:
+      PORT: "8015"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Frontend ────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../../yoda-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "4200:4200"
+    restart: unless-stopped
+
+  # ── API Gateway ─────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx-gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - meeting-service
+      - document-service
+      - chat-service
+      - dashboard-service
+      - pre-meeting-brief-service
+      - weekly-digest-service
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  pgdata:

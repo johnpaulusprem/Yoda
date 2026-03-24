@@ -1,0 +1,130 @@
+{
+  "_description": "Golden QA evaluation cases for DSPy BootstrapFewShot optimization. Add/edit/remove cases here — no code changes needed. Run optimizer to re-tune prompts.",
+  "_instructions": {
+    "how_to_add": "Add a new object to the 'cases' array with question, expected_answer, expected_sources, and category",
+    "categories": ["factual", "reasoning", "multi_doc", "meeting", "policy", "compliance", "temporal", "comparison"],
+    "how_to_optimize": "from yoda_foundation.dspy.integration import configure_dspy, YodaQA, YodaOptimizer; configure_dspy(...); optimizer = YodaOptimizer(YodaQA()); optimized = optimizer.optimize_from_file('config/golden_qa.json')"
+  },
+  "cases": [
+    {
+      "question": "What was the Q4 pipeline target?",
+      "expected_answer": "The Q4 pipeline target is $5.5M with current coverage at 1.47x ($8.1M pipeline).",
+      "expected_sources": ["Q4 Pipeline Model"],
+      "category": "factual"
+    },
+    {
+      "question": "Who is responsible for the revised Q4 forecast?",
+      "expected_answer": "Ravi Kumar is responsible for the revised Q4 forecast, which was due Jan 24 and is currently overdue.",
+      "expected_sources": ["Pipeline Review Summary"],
+      "category": "factual"
+    },
+    {
+      "question": "What was the marketing budget increase approved?",
+      "expected_answer": "A 15% marketing budget increase ($180K additional) was approved for Q1, conditional on final sign-off from Priya by EOD Wednesday.",
+      "expected_sources": ["Pipeline Review Summary", "Budget Review Summary"],
+      "category": "factual"
+    },
+    {
+      "question": "How many enterprise AEs are we hiring?",
+      "expected_answer": "2 enterprise AEs are being hired, with 12 applicants in the pipeline and a target start date of Feb 15 for the first hire.",
+      "expected_sources": ["Pipeline Review Summary"],
+      "category": "factual"
+    },
+    {
+      "question": "What is the current status of the TechFlow deal?",
+      "expected_answer": "The TechFlow deal ($450K) has procurement delays due to legal review and may slip to Q1. It has been deprioritized until legal clears.",
+      "expected_sources": ["Pipeline Review Summary", "TechFlow Email Thread"],
+      "category": "factual"
+    },
+    {
+      "question": "What decisions were made about TechFlow in the pipeline review?",
+      "expected_answer": "The decision was to deprioritize TechFlow until legal clears, move it to Q1 forecast, and have Ravi communicate the timeline change to TechFlow's procurement team.",
+      "expected_sources": ["Pipeline Review Summary"],
+      "category": "reasoning"
+    },
+    {
+      "question": "Why was the marketing budget increase approved?",
+      "expected_answer": "Lisa presented a case showing 4.2x ROI projection based on Q3 data for an enterprise demand generation campaign, which justified the 15% ($180K) increase.",
+      "expected_sources": ["Pipeline Review Summary"],
+      "category": "reasoning"
+    },
+    {
+      "question": "What is the risk if both TechFlow and GlobalSys slip to Q1?",
+      "expected_answer": "This was flagged as an open question by Mike. If both deals ($450K + $600K = $1.05M) slip, Q4 would lose significant pipeline coverage. A contingency analysis is needed.",
+      "expected_sources": ["Pipeline Review Summary"],
+      "category": "reasoning"
+    },
+    {
+      "question": "Compare the Q4 pipeline coverage with the Q3 result.",
+      "expected_answer": "Q3 closed at $4.2M (108% of target). Q4 has a $5.5M target with $8.1M pipeline (1.47x coverage), but $2.3M is in early stages with low conversion probability.",
+      "expected_sources": ["Q4 Pipeline Model", "Q3 Final Report"],
+      "category": "multi_doc"
+    },
+    {
+      "question": "What are all the overdue action items across all meetings?",
+      "expected_answer": "Overdue items include: (1) Ravi's Q4 revised forecast (due Jan 24, 3 days overdue), (2) Sarah's security questionnaire for TechFlow (due Jan 25, 2 days overdue), (3) Tom's customer reference list for GlobalSys (due Jan 26, 1 day overdue).",
+      "expected_sources": ["Pipeline Review Summary", "Sales Sync Summary"],
+      "category": "multi_doc"
+    },
+    {
+      "question": "What documents were recently updated for the pipeline review?",
+      "expected_answer": "Q4 Pipeline Model v2.xlsx (updated yesterday by Ravi, 12 sheets), Enterprise Target Account List.docx (updated 2 days ago by Ravi, 47 accounts), and Competitive Win-Loss Analysis Q3.pptx (updated 3 days ago by Lisa, 24 slides).",
+      "expected_sources": ["Q4 Pipeline Model", "Enterprise Target Account List", "Competitive Win-Loss Analysis"],
+      "category": "multi_doc"
+    },
+    {
+      "question": "What was discussed in the last pipeline review meeting?",
+      "expected_answer": "The Jan 20 Pipeline Review covered: enterprise segment focus decision, hiring 2 AEs, Q3 close at $4.2M (108%), Q4 target at $5.5M, TechFlow procurement delays, and SMB outbound pause until Q2.",
+      "expected_sources": ["Pipeline Review - Jan 20 Summary"],
+      "category": "meeting"
+    },
+    {
+      "question": "What should I prepare for the board deck review meeting?",
+      "expected_answer": "The Board Deck v3.pptx (47 pages) was updated by Priya 2 hours ago and needs your final review before the 2:30 PM meeting. Key preparation areas include the Q4 pipeline status, marketing budget decision, and Series C term sheet status.",
+      "expected_sources": ["Board Deck v3.pptx", "Pipeline Review Summary"],
+      "category": "meeting"
+    },
+    {
+      "question": "What is the compensation plan for 2026?",
+      "expected_answer": "The Sales Compensation Plan 2026.pdf was shared 4 days ago by Priya Sharma (8 pages) and is pending your review and approval.",
+      "expected_sources": ["Sales Compensation Plan 2026.pdf"],
+      "category": "policy"
+    },
+    {
+      "question": "What are the terms of the Series C amendment?",
+      "expected_answer": "The Series C Term Sheet - Amended.pdf was shared yesterday by Legal (12 pages) and requires your signature by today EOD.",
+      "expected_sources": ["Series C Term Sheet - Amended.pdf"],
+      "category": "compliance"
+    },
+    {
+      "question": "How has our meeting time changed this month?",
+      "expected_answer": "Meeting time is at 32 hours/week, up 15% from last month. 45% are recurring, 30% are 1:1s. Meeting duration has decreased 12% vs last month with more meetings ending on time.",
+      "expected_sources": ["Meeting Analytics", "Weekly Digest"],
+      "category": "temporal"
+    },
+    {
+      "question": "What is our action item completion rate trend?",
+      "expected_answer": "73% completion rate, down from 82% last month. Sales team has the highest overdue rate at 35%, while Engineering is at 95% completion.",
+      "expected_sources": ["Action Item Analytics"],
+      "category": "temporal"
+    },
+    {
+      "question": "How does the Acme Corp deal compare to GlobalSys?",
+      "expected_answer": "Acme Corp is $800K at 90% probability (needs exec sponsor call), while GlobalSys is $600K at 75% probability (needs technical requirements document). Acme is further along and higher value.",
+      "expected_sources": ["Pipeline Review Summary"],
+      "category": "comparison"
+    },
+    {
+      "question": "Which team has the most overdue items?",
+      "expected_answer": "The Sales team has the highest overdue rate at 35%, primarily driven by Ravi Kumar's pending items. Engineering is the best performer at 95% completion rate.",
+      "expected_sources": ["Action Item Analytics", "Pipeline Review Summary"],
+      "category": "comparison"
+    },
+    {
+      "question": "What are Ravi Kumar's outstanding commitments?",
+      "expected_answer": "Ravi has: (1) Overdue Q4 revised forecast (due Jan 24), (2) Revised Q4 forecast with TechFlow adjustment (due Jan 28), (3) Communicate Q1 timeline to TechFlow (due Jan 29). He also needs to follow up on the Acme Corp executive sponsor call.",
+      "expected_sources": ["Pipeline Review Summary", "Action Tracker"],
+      "category": "factual"
+    }
+  ]
+}

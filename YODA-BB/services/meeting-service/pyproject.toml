@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meeting-service"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "yoda-foundation",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "apscheduler>=3.10.0",
+    "rapidfuzz>=3.0.0",
+    "httpx>=0.24.0",
+    "websockets>=11.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21", "pyright>=1.1", "ruff>=0.1", "pytest-cov"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
