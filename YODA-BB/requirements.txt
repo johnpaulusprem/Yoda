@@ -1,0 +1,65 @@
+# YODA Backend - Combined Requirements
+# Foundation + All Services
+
+# ── Core Framework ──────────────────────────────────────────────
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0
+pydantic-settings>=2.0
+
+# ── Database ────────────────────────────────────────────────────
+sqlalchemy[asyncio]>=2.0
+asyncpg
+pgvector
+alembic
+
+# ── HTTP / Networking ──────────────────────────────────────────
+httpx>=0.24.0
+websockets>=11.0
+
+# ── Azure SDKs ─────────────────────────────────────────────────
+azure-identity
+msal
+azure-ai-inference
+openai
+
+# ── Document Processing ────────────────────────────────────────
+PyPDF2
+python-docx
+python-pptx
+beautifulsoup4
+lxml
+
+# ── Auth / Security ────────────────────────────────────────────
+PyJWT[crypto]
+email-validator
+
+# ── Resilience / Utilities ─────────────────────────────────────
+tenacity
+python-dotenv
+python-json-logger
+python-multipart>=0.0.6
+
+# ── Scheduling ─────────────────────────────────────────────────
+apscheduler>=3.10.0
+
+# ── Meeting Service ───────────────────────────────────────────
+rapidfuzz>=3.0.0
+
+# ── AI / DSPy ──────────────────────────────────────────────────
+dspy>=3.1.0
+
+# ── Observability ──────────────────────────────────────────────
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-otlp
+
+# ── Redis ──────────────────────────────────────────────────────
+redis
+
+# ── Dev Dependencies ───────────────────────────────────────────
+# pytest>=7.0
+# pytest-asyncio>=0.21
+# pytest-cov
+# pyright>=1.1
+# ruff>=0.1

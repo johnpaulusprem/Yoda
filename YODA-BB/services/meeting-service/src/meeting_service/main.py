@@ -79,12 +79,19 @@ async def lifespan(app: FastAPI):
     from meeting_service.services.owner_resolver import OwnerResolver
     from yoda_foundation.utils.auth.token_provider import TokenProvider
 
-    # Initialize services
-    token_provider = TokenProvider(
-        tenant_id=settings.AZURE_TENANT_ID,
-        client_id=settings.AZURE_CLIENT_ID,
-        client_secret=settings.AZURE_CLIENT_SECRET,
-    )
+    # Initialize services — skip Azure-dependent components when credentials
+    # are not configured (local dev without Azure).
+    token_provider = None
+    if settings.AZURE_TENANT_ID and settings.AZURE_CLIENT_ID and settings.AZURE_CLIENT_SECRET:
+        token_provider = TokenProvider(
+            tenant_id=settings.AZURE_TENANT_ID,
+            client_id=settings.AZURE_CLIENT_ID,
+            client_secret=settings.AZURE_CLIENT_SECRET,
+        )
+    else:
+        logger.warning(
+            "Azure credentials not configured; Graph/ACS integrations disabled"
+        )
     graph_client = GraphClient(token_provider=token_provider)
 
     scheduler = AsyncIOScheduler()
