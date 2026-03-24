@@ -293,6 +293,170 @@ Navigate to the **Settings** page from the sidebar or user menu.
 
 ---
 
+## Architecture & Startup Flow
+
+Understanding how YODA's microservices boot up helps with local development, debugging, and deployment.
+
+### Boot Sequence Overview
+
+```
+                    ┌──────────┐    ┌───────┐
+                    │PostgreSQL│    │ Redis │
+                    └────┬─────┘    └───┬───┘
+                         │   healthy    │
+                    ┌────┴──────────────┴────┐
+                    │   alembic upgrade head  │
+                    └───────────┬─────────────┘
+        ┌───────┬───────┬──────┼──────┬────────┐
+        ▼       ▼       ▼      ▼      ▼        ▼
+    meeting  document  chat  dashboard brief  digest
+    :8001    :8002    :8003   :8004   :8005   :8006
+        │       │       │      │      │        │
+        └───────┴───────┴──┬───┴──────┴────────┘
+                           ▼
+                     Nginx Gateway
+                        :80
+                           │
+                     ┌─────┴─────┐
+                     │ Frontend  │
+                     │   :4200   │
+                     └───────────┘
+```
+
+### Layer 1 — Infrastructure (Starts First)
+
+Everything depends on these two containers. Docker Compose will not start any application service until both report healthy.
+
+| Container | Port | Health Check | Timeout |
+|-----------|------|-------------|---------|
+| **PostgreSQL** (pgvector/pgvector:pg16) | 5432 | `pg_isready -U yoda` | 5s interval, 3s timeout, 5 retries |
+| **Redis** (redis:7-alpine) | 6379 | `redis-cli ping` | 5s interval, 3s timeout, 5 retries |
+
+### Layer 2 — Database Migrations (One-Time Prerequisite)
+
+```bash
+cd YODA-BB
+DATABASE_URL=postgresql+asyncpg://yoda:yoda_dev@localhost:5432/yoda alembic upgrade head
+```
+
+Alembic creates all tables in a single shared PostgreSQL database. All 6 services use the same DB. The migration loads 12+ SQLAlchemy models from the foundation library (Meeting, MeetingParticipant, TranscriptSegment, MeetingSummary, ActionItem, Document, DocumentChunk, ChatSession, ChatMessage, WeeklyDigest, Notification, Project, etc.).
+
+**Migrations must complete before any service starts.**
+
+### Layer 3 — Foundation Library (Install Prerequisite)
+
+```bash
+cd YODA-BB/foundation
+pip install -e ".[dev]"
+```
+
+Every service imports `yoda_foundation` for shared models, schemas, config, security, and database utilities. This must be installed before running any service.
+
+### Layer 4 — Application Services (Start in Parallel)
+
+Once PostgreSQL and Redis are healthy, **all 6 services start simultaneously**. They are completely independent of each other — no service depends on another service.
+
+#### Service Startup Details
+
+| Service | Port | Startup Weight | Key Startup Actions |
+|---------|------|----------------|---------------------|
+| **dashboard-service** | 8004 | Lightest | DB engine only. No Azure deps. Fastest to boot. |
+| **document-service** | 8002 | Light | DB engine + optional GraphConnector. RAG components (embedder, vector store, chunker) lazy-load on first request. |
+| **pre-meeting-brief-service** | 8005 | Light | DB engine + optional Graph client, AI connector, Redis cache. All Azure deps are optional. |
+| **weekly-digest-service** | 8006 | Light | DB engine + optional AI connector + APScheduler (cron job for Friday digest generation). |
+| **chat-service** | 8003 | Medium | DB engine + Redis cache (with MemoryCache fallback). Embedder, LLM, and RAG pipeline lazy-load on first request. |
+| **meeting-service** | 8001 | Heaviest | DB engine + TokenProvider + GraphClient + BotCommander + AIProcessor + CalendarWatcher + NudgeScheduler + APScheduler. Also starts a background task to set up calendar subscriptions (30s timeout, non-blocking). |
+
+#### What Each Service Initializes on Startup
+
+**meeting-service** (most complex):
+1. Load Settings, setup logging + OpenTelemetry
+2. Initialize DB connection pool
+3. Initialize TokenProvider (Azure AD), GraphClient (Microsoft Graph API)
+4. Initialize APScheduler with two periodic jobs:
+   - `nudge_scheduler.run()` — every 60 minutes
+   - `calendar_watcher.renew_subscriptions()` — every 12 hours
+5. Initialize BotCommander (ACS bot), AIProcessor, DeliveryService, PostProcessingService
+6. Background: setup calendar subscriptions (non-blocking, 30s timeout)
+
+**document-service**:
+1. Load Settings, setup logging
+2. Initialize DB engine + session factory
+3. Initialize GraphConnector (optional, for SharePoint/OneDrive sync)
+4. **Lazy on first request**: AzureEmbedder, PGVectorStore, RecursiveChunker (chunk_size=1000, overlap=200), SimilarityRetriever, IngestionPipeline, DocumentClassifier
+
+**chat-service**:
+1. Load Settings, setup logging
+2. Initialize DB engine + session factory
+3. Initialize cache (try Redis first, fallback to MemoryCache with 1000 entry limit)
+4. **Lazy on first request**: AzureEmbedder, PGVectorStore, SimilarityRetriever, ContextBuilder, LLMAdapter, RAGPipeline (DSPy ChainOfThought module)
+
+**dashboard-service**:
+1. Load Settings, setup logging
+2. Initialize DB engine
+3. Ready — minimal startup, no external dependencies beyond DB + Redis
+
+**pre-meeting-brief-service**:
+1. Load Settings, setup logging
+2. Initialize DB engine + session factory
+3. Optional: Graph client, AI connector, Redis cache (all can be `None`)
+
+**weekly-digest-service**:
+1. Load Settings, setup logging
+2. Initialize DB engine + session factory
+3. Optional: AI connector, TokenProvider
+4. Initialize APScheduler with cron job for digest generation (default: Friday afternoon)
+
+### Layer 5 — Nginx API Gateway
+
+```
+Nginx (Port 80) — starts after all services are available
+```
+
+Routes requests by URL prefix to the correct service:
+
+| Route | Service |
+|-------|---------|
+| `/api/meetings`, `/api/action-items`, `/api/admin`, `/api/bot-events`, `/webhooks`, `/health` | meeting-service:8010 |
+| `/api/documents`, `/api/insights` | document-service:8011 |
+| `/api/chat` | chat-service:8012 |
+| `/api/dashboard`, `/api/notifications`, `/api/search`, `/api/settings` | dashboard-service:8013 |
+| `/api/briefs` | pre-meeting-brief-service:8014 |
+| `/api/digests` | weekly-digest-service:8015 |
+| `/` (catch-all) | frontend:4200 |
+
+WebSocket support is enabled (Upgrade/Connection headers). Max upload size: 50 MB.
+
+### Layer 6 — Frontend
+
+```
+Angular (Port 4200) — starts in parallel with backend, no backend dependency at startup
+```
+
+The frontend is fully independent at boot time. It only needs the backend to be available when making API calls at runtime.
+
+### Service Independence Matrix
+
+| Service | PostgreSQL | Redis | Graph API | AI Foundry | ACS | Embeddings | Can Run Standalone? |
+|---------|-----------|-------|-----------|------------|-----|-----------|---------------------|
+| **dashboard-service** | Required | Required | — | — | — | — | **Yes** — fully independent |
+| **document-service** | Required | Required | Optional | Optional | — | Required (for search) | Partially — needs embeddings for RAG |
+| **pre-meeting-brief** | Required | Required | Optional | Optional | — | — | **Yes** — degrades gracefully |
+| **weekly-digest** | Required | Required | Optional | Optional | — | — | **Yes** — degrades gracefully |
+| **chat-service** | Required | Required | — | Required | — | Required | No — needs AI + embeddings |
+| **meeting-service** | Required | Required | Required | Required | Required | — | No — needs Azure credentials |
+
+### Key Gotchas
+
+1. **Shared database** — All 6 services use one PostgreSQL instance; migrations must run first
+2. **Lazy-loaded RAG** — Document and Chat services don't initialize embedder/LLM at startup; the first request will be slower
+3. **Redis fallback** — Chat-service gracefully falls back to MemoryCache (1000 entries) if Redis is unavailable; other services log a warning but continue
+4. **Calendar subscription timeout** — Meeting-service has a 30s timeout for initial subscription setup but continues if it fails (non-blocking)
+5. **meeting-service is Azure-critical** — Requires valid `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `ACS_CONNECTION_STRING`, and `AI_FOUNDRY_ENDPOINT`
+6. **Local dev tip** — Start only **dashboard-service** for the fastest feedback loop; it has zero Azure dependencies
+
+---
+
 ## API Reference (For Developers)
 
 YODA exposes REST APIs for each microservice:
