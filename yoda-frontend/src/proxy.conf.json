@@ -1,0 +1,14 @@
+{
+  "/yoda-api": {
+    "target": "http://localhost:8001",
+    "secure": false,
+    "changeOrigin": true,
+    "pathRewrite": { "^/yoda-api": "" }
+  },
+  "/yoda-worker": {
+    "target": "http://localhost:8002",
+    "secure": false,
+    "changeOrigin": true,
+    "pathRewrite": { "^/yoda-worker": "" }
+  }
+}

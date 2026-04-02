@@ -1,8 +1,0 @@
-node_modules/
-dist/
-debug-screenshots/
-bot.log
-package-lock.json
-.env
-.env.*
-!.env.example

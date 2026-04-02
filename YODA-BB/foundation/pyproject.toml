@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yoda-foundation"
+version = "1.0.0"
+description = "YODA Foundation Library - shared models, services, and utilities"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg",
+    "pgvector",
+    "httpx",
+    "azure-identity",
+    "msal",
+    "azure-ai-inference",
+    "openai",
+    "PyPDF2",
+    "python-docx",
+    "python-pptx",
+    "beautifulsoup4",
+    "lxml",
+    "PyJWT[crypto]",
+    "tenacity",
+    "python-dotenv",
+    "python-json-logger",
+    "fastapi>=0.100.0",
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pyright",
+    "ruff",
+    "pytest-cov",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

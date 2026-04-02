@@ -1,0 +1,240 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "ColumnSet",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "Image",
+              "url": "https://img.icons8.com/fluency/48/warning-shield.png",
+              "size": "Small",
+              "style": "Default",
+              "altText": "Conflict alert icon"
+            }
+          ],
+          "verticalContentAlignment": "Center"
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Decision Conflict Detected",
+              "weight": "Bolder",
+              "size": "Large",
+              "color": "Warning"
+            },
+            {
+              "type": "TextBlock",
+              "text": "A potential conflict has been identified between decisions",
+              "size": "Small",
+              "isSubtle": true,
+              "spacing": "None",
+              "wrap": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "separator": true,
+      "spacing": "Medium",
+      "style": "emphasis",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "Current Decision",
+          "weight": "Bolder",
+          "size": "Medium",
+          "color": "Accent"
+        },
+        {
+          "type": "TextBlock",
+          "text": "${current_decision}",
+          "wrap": true,
+          "spacing": "Small",
+          "weight": "Bolder"
+        },
+        {
+          "type": "FactSet",
+          "spacing": "Small",
+          "facts": [
+            {
+              "title": "Meeting:",
+              "value": "${current_meeting_title}"
+            },
+            {
+              "title": "Date:",
+              "value": "${current_meeting_date}"
+            },
+            {
+              "title": "Decided by:",
+              "value": "${current_decision_maker}"
+            },
+            {
+              "title": "Topic:",
+              "value": "${current_topic}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "separator": true,
+      "spacing": "Medium",
+      "style": "warning",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "Conflicting Past Decision",
+          "weight": "Bolder",
+          "size": "Medium",
+          "color": "Attention"
+        },
+        {
+          "type": "TextBlock",
+          "text": "${conflicting_decision}",
+          "wrap": true,
+          "spacing": "Small",
+          "weight": "Bolder"
+        },
+        {
+          "type": "FactSet",
+          "spacing": "Small",
+          "facts": [
+            {
+              "title": "Meeting:",
+              "value": "${conflicting_meeting_title}"
+            },
+            {
+              "title": "Date:",
+              "value": "${conflicting_meeting_date}"
+            },
+            {
+              "title": "Decided by:",
+              "value": "${conflicting_decision_maker}"
+            },
+            {
+              "title": "Topic:",
+              "value": "${conflicting_topic}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "separator": true,
+      "spacing": "Medium",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "Conflict Analysis",
+          "weight": "Bolder",
+          "size": "Medium"
+        },
+        {
+          "type": "FactSet",
+          "spacing": "Small",
+          "facts": [
+            {
+              "title": "Similarity Score:",
+              "value": "${similarity_score}%"
+            },
+            {
+              "title": "Conflict Type:",
+              "value": "${conflict_type}"
+            },
+            {
+              "title": "Days Since Original:",
+              "value": "${days_between_decisions}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "separator": true,
+      "spacing": "Medium",
+      "style": "emphasis",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "AI-Suggested Resolution",
+          "weight": "Bolder",
+          "size": "Medium",
+          "color": "Accent"
+        },
+        {
+          "type": "TextBlock",
+          "text": "${suggested_resolution}",
+          "wrap": true,
+          "spacing": "Small"
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "separator": true,
+      "spacing": "Small",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "Powered by CXO AI Companion | Conflict detected by AI analysis | ${model_used}",
+          "size": "Small",
+          "isSubtle": true,
+          "horizontalAlignment": "Center",
+          "wrap": true
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Keep Current Decision",
+      "style": "positive",
+      "data": {
+        "action": "keep_current",
+        "conflict_id": "${conflict_id}",
+        "current_decision_id": "${current_decision_id}"
+      }
+    },
+    {
+      "type": "Action.Submit",
+      "title": "Revert to Previous",
+      "style": "destructive",
+      "data": {
+        "action": "revert_previous",
+        "conflict_id": "${conflict_id}",
+        "previous_decision_id": "${conflicting_decision_id}"
+      }
+    },
+    {
+      "type": "Action.Submit",
+      "title": "Flag for Review",
+      "data": {
+        "action": "flag_review",
+        "conflict_id": "${conflict_id}"
+      }
+    },
+    {
+      "type": "Action.Submit",
+      "title": "Dismiss",
+      "data": {
+        "action": "dismiss_conflict",
+        "conflict_id": "${conflict_id}"
+      }
+    }
+  ]
+}

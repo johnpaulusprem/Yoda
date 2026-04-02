@@ -1,0 +1,109 @@
+View,Feature ID,Feature Description,Backend Status,API Endpoint,Gap/Notes
+Shell,S-01,Sidebar navigation (7 views + Settings),Ready,All service health endpoints,Settings view has no backend yet
+Shell,S-02,Global search bar (meetings/documents/people),Ready,GET /api/search,Dashboard service has cross-entity search
+Shell,S-03,M365 connection status indicator,Partial,GET /health,Health endpoint exists but no M365 connectivity check
+Shell,S-04,Notification bell with unread count,Ready,"GET /api/notifications/count, GET /api/notifications",NotificationService in dashboard-service
+Shell,S-05,User avatar / profile,Not Started,,No user profile endpoint or settings API
+Shell,S-06,Dark/light theme toggle,Frontend Only,,No backend needed — client-side preference
+Dashboard,D-01,Greeting with user name + date + meeting count,Ready,"GET /api/dashboard/stats, GET /api/meetings",Stats endpoint returns meetings_today
+Dashboard,D-02,Stat card: Meetings Today (count + trend),Ready,GET /api/dashboard/stats,Returns meetings_today
+Dashboard,D-03,Stat card: Open Actions (count + trend),Ready,GET /api/dashboard/stats,Returns pending_actions
+Dashboard,D-04,Stat card: Overdue Items (count),Ready,GET /api/dashboard/stats,Returns overdue_actions
+Dashboard,D-05,Stat card: Docs to Review (count + priority),Ready,GET /api/dashboard/stats,Returns docs_to_review
+Dashboard,D-06,Today's meetings list with time/title/attendees,Ready,GET /api/meetings?status=scheduled,Meeting list with filtering
+Dashboard,D-07,Meeting tags (Brief Ready / High Priority / Decision Needed / Prep Required),Partial,GET /api/meetings,MeetingWithTagsResponse exists but tag computation not implemented
+Dashboard,D-08,Join Meeting button (Join Now / Starting Soon / In Progress),Ready,MeetingResponse.join_url + join_status,join_status computed field added; join_url on every meeting
+Dashboard,D-09,Click meeting → open Pre-Meeting Brief,Ready,GET /api/briefs/{meeting_id},Pre-meeting-brief-service
+Dashboard,D-10,Needs Your Attention section (overdue + due today items),Ready,GET /api/dashboard/attention-items,Returns overdue and due-soon action items
+Dashboard,D-11,Recent Activity feed (docs updated / actions completed / mentions / summaries),Ready,GET /api/dashboard/activity-feed,Returns mixed activity feed
+Dashboard,D-12,Quick Actions shortcuts (Brief / Ask AI / Summary / Actions / Digest),Frontend Only,,Navigation shortcuts — no backend needed
+Pre-Meeting Brief,B-01,Meeting title + time + location + duration + recurrence,Ready,GET /api/briefs/{meeting_id},PreMeetingBriefResponse has meeting_subject and scheduled_start
+Pre-Meeting Brief,B-02,Countdown timer (Starts in X min),Frontend Only,,Computed client-side from scheduled_start
+Pre-Meeting Brief,B-03,Join Meeting button (large + pulsing),Ready,MeetingResponse.join_url,join_url available on meeting record
+Pre-Meeting Brief,B-04,Attendee grid with avatar/name/role/context,Ready,GET /api/briefs/{meeting_id},PreMeetingBriefResponse.attendees has job_title/department/recent_interactions/overdue_actions
+Pre-Meeting Brief,B-05,Attendee context: reporting relationship,Partial,Graph API,Graph connector can get manager chain but brief service doesn't compute "Reports to you"
+Pre-Meeting Brief,B-06,Attendee context: overdue action items,Ready,GET /api/briefs/{meeting_id},attendee.overdue_actions in brief response
+Pre-Meeting Brief,B-07,Attendee context: last 1:1 date,Partial,GET /api/briefs/{meeting_id},attendee.last_meeting in brief response — needs meeting type filtering for 1:1s
+Pre-Meeting Brief,B-08,From Last Meeting: past decisions,Ready,GET /api/briefs/{meeting_id},past_decisions in brief response
+Pre-Meeting Brief,B-09,From Last Meeting: overdue actions from last time,Ready,GET /api/briefs/{meeting_id},Past action items with status available
+Pre-Meeting Brief,B-10,From Last Meeting: key metrics/numbers,Partial,,Summary has key_topics but no structured metric extraction
+Pre-Meeting Brief,B-11,From Last Meeting: risk flags,Partial,,Not a dedicated field — would come from summary text or AI extraction
+Pre-Meeting Brief,B-12,Relevant Documents (updated this week),Ready,GET /api/briefs/{meeting_id},related_documents in brief response
+Pre-Meeting Brief,B-13,Document detail: updated by / sheet count / key changes,Partial,Graph API,Graph gives last_modified_by and basic metadata; "key changes" is not extracted
+Pre-Meeting Brief,B-14,Related Email Threads,Partial,GET /api/briefs/{meeting_id},recent_email_subjects in response; full thread content not fetched
+Pre-Meeting Brief,B-15,Suggested Topics & Questions (AI-generated),Ready,GET /api/briefs/{meeting_id},suggested_questions in response — AI Foundry generates these
+Pre-Meeting Brief,B-16,Click suggested question → opens in Chat,Frontend Only,,Navigation action — brief provides the question text
+Meeting Summary,MS-01,Summary header with title/date/duration + Edit/Share buttons,Partial,GET /api/meetings/{id},MeetingDetailResponse has summary; Edit/Share actions not implemented
+Meeting Summary,MS-02,Key Discussion Points (structured paragraphs),Ready,GET /api/meetings/{id},summary.key_topics in SummaryResponse
+Meeting Summary,MS-03,Decisions Made (with conditions/context),Ready,GET /api/meetings/{id},summary.decisions in SummaryResponse
+Meeting Summary,MS-04,Action Items (with owner/due date/confidence),Ready,GET /api/meetings/{id},MeetingDetailResponse.action_items
+Meeting Summary,MS-05,Action item confidence level (High/Medium),Partial,,ActionItem has priority but not AI confidence score
+Meeting Summary,MS-06,Open Questions (unresolved items),Ready,GET /api/meetings/{id},summary includes unresolved_questions
+Meeting Summary,MS-07,Conflict Detection (contradicts previous decisions),Not Started,,No conflict detection service exists
+Meeting Summary,MS-08,Link to previous meeting summary from conflict,Partial,,Meeting records exist; cross-meeting referencing not built
+Meeting Summary,MS-09,Meeting Analytics (duration/participants/decisions/actions counts),Ready,GET /api/meetings/{id},Counts derivable from MeetingDetailResponse fields
+Meeting Summary,MS-10,Share Summary to Attendees button,Partial,POST /api/meetings/{id}/reprocess,DeliveryService can send Adaptive Cards but no dedicated "share summary" endpoint
+Meeting Summary,MS-11,Edit Summary button,Not Started,,No PATCH endpoint for summary text editing
+Chat / Ask AI,C-01,Empty state with welcome message + suggestions,Frontend Only,,Hardcoded suggestions or fetched from config
+Chat / Ask AI,C-02,Suggested prompts (attention today / Ravi commitments / project status / summarize week),Frontend Only,,Navigation/suggestion — no backend needed
+Chat / Ask AI,C-03,Send message and get AI response,Ready,"POST /api/chat/sessions/{id}/messages",ChatService with RAG pipeline
+Chat / Ask AI,C-04,RAG-powered answers from meetings/docs/calendar,Ready,POST /api/chat/sessions/{id}/messages,RAG pipeline retrieves from pgvector
+Chat / Ask AI,C-05,Source citations on responses (Meeting Summary / SharePoint / Action Tracker),Ready,ChatMessageResponse.citations,Citations tracked via CitationTracker
+Chat / Ask AI,C-06,Voice input button (microphone),Not Started,,No speech-to-text integration
+Chat / Ask AI,C-07,Chat session persistence (history),Ready,"POST /api/chat/sessions, GET /api/chat/sessions",ChatSession model with messages
+Chat / Ask AI,C-08,Cross-domain Q&A (meetings + docs + emails + calendar),Partial,,RAG searches meetings and documents; email content not indexed
+Action Items,A-01,Action items list with status filters (All/Open/Overdue/In Progress/Completed),Ready,"GET /api/action-items?status=open,overdue,in_progress,completed",Full status filtering
+Action Items,A-02,Filter by owner (All/Assigned to Me/Assigned by Me/My Direct Reports),Partial,GET /api/action-items?user_id=...,user_id filter exists; "assigned by me" and "direct reports" filters not implemented
+Action Items,A-03,Filter by source meeting,Ready,GET /api/action-items?meeting_id=...,meeting_id filter
+Action Items,A-04,Overdue section with days-overdue count,Ready,GET /api/action-items?status=overdue,ActionItem has due_date; overdue computed
+Action Items,A-05,Due Soon section (today/tomorrow),Ready,GET /api/action-items?status=open,Filterable by due_date range
+Action Items,A-06,In Progress section,Ready,GET /api/action-items?status=in_progress,Status filter
+Action Items,A-07,Upcoming section with on-track status,Ready,GET /api/action-items?status=open,Open items with future due dates
+Action Items,A-08,Source meeting link on each action item,Ready,ActionItem.meeting_id,FK to meeting record
+Action Items,A-09,Mark action complete,Ready,POST /api/action-items/{id}/complete,Sets completed_at timestamp
+Action Items,A-10,Snooze action item,Ready,POST /api/action-items/{id}/snooze,Sets snooze_until; NudgeScheduler respects it
+Action Items,A-11,Update action item (status/priority/assignee/deadline),Ready,PATCH /api/action-items/{id},Full partial update
+Action Items,A-12,Nudge reminders for overdue items,Ready,NudgeScheduler background task,Sends Adaptive Cards via DeliveryService
+Action Items,A-13,Escalation after threshold,Ready,NudgeScheduler,Escalation to manager after configurable threshold
+Documents,DOC-01,Document list with type filter (Presentations/Spreadsheets/Documents/PDFs),Ready,"GET /api/documents?doc_type=presentations,spreadsheets,documents,pdfs",MIME type filtering
+Documents,DOC-02,Sort by Recently Updated / Most Relevant / Shared with Me,Ready,"GET /api/documents/recent, GET /api/documents/shared-with-me",Multiple endpoints
+Documents,DOC-03,Needs Your Review section with priority tags,Ready,GET /api/documents/needs-review,Priority-ordered review queue
+Documents,DOC-04,Review tags (High Priority / Action Required / Pending Review),Ready,DocumentResponse.priority + review_status,Both fields available
+Documents,DOC-05,Recently Updated documents with metadata,Ready,GET /api/documents/recent,Returns docs ordered by updated_at
+Documents,DOC-06,Document metadata: updated by / page count / folder path,Ready,DocumentResponse,last_modified_by + page_count + folder_path fields
+Documents,DOC-07,Related to Today's Meetings section,Ready,GET /api/documents/meeting-related,Cross-refs calendar events with docs
+Documents,DOC-08,SharePoint/OneDrive sync,Ready,POST /api/documents/sync,sync_from_graph pulls recent OneDrive items
+Documents,DOC-09,Document classification (auto-categorize),Ready,"POST /api/documents/{id}/classify, auto in process_document",23-category classifier with confidence
+Documents,DOC-10,Semantic search across documents,Ready,GET /api/documents/search,RAG retriever with pgvector
+Documents,DOC-11,Open document in SharePoint (external link),Ready,DocumentResponse.source_url,URL to original document
+Insights,I-01,Meeting Time Analysis (hours/week + trend + breakdown),Ready,GET /api/insights/meeting-time,Returns total_meetings and avg_per_week
+Insights,I-02,Action Item Completion rate (% + team breakdown),Ready,GET /api/insights/action-completion,Returns completion_rate; team breakdown needs enhancement
+Insights,I-03,Decision Velocity (avg days to resolution),Not Started,,No decision timestamp tracking; would need decision_requested_at and decided_at
+Insights,I-04,Collaboration Patterns (top collaborators + stale 1:1s),Ready,GET /api/insights/collaboration,Returns top_collaborators and stale_1on1s
+Insights,I-05,Notable Patterns (recurring topics / decision reversals / duration trends),Partial,GET /api/insights/patterns,Endpoint exists but limited pattern detection
+Insights,I-06,Insight: recurring topic detection across meetings,Not Started,,Would need NLP topic extraction across meeting summaries
+Insights,I-07,Insight: decision reversal detection,Not Started,,Would need cross-meeting decision comparison
+Insights,I-08,Recommendation engine (delegate meetings / schedule 1:1s),Not Started,,No recommendation generation
+Weekly Digest,WD-01,Week header with date range,Ready,GET /api/digests/latest,WeeklyDigest has period info
+Weekly Digest,WD-02,Meetings Summary stats (total/hours/decisions/actions),Ready,GET /api/digests/latest,WeeklyDigestResponse includes aggregated stats
+Weekly Digest,WD-03,Key Decisions This Week (list with sources),Ready,GET /api/digests/latest,Digest includes decisions from the week
+Weekly Digest,WD-04,Items Needing Follow-up (overdue + at-risk),Ready,GET /api/digests/latest,Included in digest generation
+Weekly Digest,WD-05,Project Updates with status/owner,Partial,GET /api/digests/latest,Project model exists but project tracking is minimal
+Weekly Digest,WD-06,People Notes (stale 1:1s / milestones),Partial,,Collaboration insights exist; "90 days in role" type milestones not tracked
+Weekly Digest,WD-07,Auto-generate on schedule (Friday 4 PM),Ready,APScheduler cron trigger,Configurable DIGEST_SCHEDULE_DAY/HOUR
+Weekly Digest,WD-08,Manual trigger generation,Ready,POST /api/digests/generate,On-demand generation
+Meetings List,ML-01,Meetings list grouped by day (Today / Tomorrow / etc.),Ready,GET /api/meetings,Returns meetings ordered by scheduled_start
+Meetings List,ML-02,Time filter tabs (Today / This Week / This Month),Ready,GET /api/meetings?limit=...,Date range filtering
+Meetings List,ML-03,Meeting tags (Brief Ready / High Priority / Recurring / External),Partial,MeetingWithTagsResponse,Tag schema exists but tag computation not fully implemented
+Meetings List,ML-04,Join button states (In Progress / Join Now / Starting Soon),Ready,MeetingResponse.join_status + join_url,Computed join_status field
+Meetings List,ML-05,Click meeting → Pre-Meeting Brief,Ready,GET /api/briefs/{meeting_id},Brief service generates on demand
+Meetings List,ML-06,Duration shown per meeting,Ready,MeetingResponse,scheduled_start and scheduled_end — duration computable
+Settings,SET-01,Settings view,Not Started,,No settings API or view — nav item exists but no backend
+Cross-Cutting,X-01,Azure AD SSO authentication,Ready,JWT validation + MSAL TokenProvider,App-only daemon flow; user SSO needs MSAL browser redirect
+Cross-Cutting,X-02,Real-time updates (meeting status changes),Not Started,,No WebSocket or SSE push to frontend
+Cross-Cutting,X-03,Adaptive Card delivery to Teams,Ready,DeliveryService,Summary cards / nudge cards / digest cards
+Cross-Cutting,X-04,Graph API calendar subscription webhooks,Ready,POST /webhooks/graph,CalendarWatcher handles create/update/delete
+Cross-Cutting,X-05,Bot joins meeting automatically,Ready,POST /api/meetings/{id}/join,BotCommander + CalendarWatcher auto-scheduling
+Cross-Cutting,X-06,Transcript ingestion from bot,Ready,POST /api/bot-events/transcript,Batched transcript segments with dedup
+Cross-Cutting,X-07,AI processing (summary + action extraction),Ready,POST /api/meetings/{id}/reprocess,AIProcessor calls GPT-4o
+Cross-Cutting,X-08,Post-processing pipeline (AI → owner resolve → delivery),Ready,PostProcessingService,Orchestrates full pipeline

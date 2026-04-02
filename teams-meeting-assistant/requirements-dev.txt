@@ -1,7 +1,0 @@
--r requirements.txt
-pytest==8.3.*
-pytest-asyncio==0.24.*
-httpx==0.28.*
-factory-boy==3.3.*
-faker==33.*
-aiosqlite==0.20.*

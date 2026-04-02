@@ -30,9 +30,27 @@ Thumbs.db
 
 # Claude Code
 .claude/
+.mcp.json
+.remember/
+
+# Backups & archives
+Yoda-Bkup/
+nha.zip
+*.zip
+
+# Node
+node_modules/
+package-lock.json
+
+# Angular
+.angular/
 
 # Docker volumes
 postgres_data/
+
+# Browser bot
+bot.log
+debug-screenshots/
 
 # Test / coverage
 .pytest_cache/
