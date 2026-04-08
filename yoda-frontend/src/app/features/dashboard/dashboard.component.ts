@@ -66,7 +66,7 @@ import { formatTime, formatRelative } from '../../shared/utils/format.utils';
         <span class="card-title">Today's Meetings</span>
         <a routerLink="/meetings" class="view-all">View all &rarr;</a>
       </div>
-      @for (m of meetings(); track m.id) {
+      @for (m of todaysMeetings(); track m.id) {
         <div class="meeting-row" [routerLink]="['/meetings', m.id, 'brief']">
           <div class="meeting-left">
             <div class="meeting-time">{{ formatTime(m.scheduled_start) }}</div>
@@ -87,7 +87,7 @@ import { formatTime, formatRelative } from '../../shared/utils/format.utils';
           </div>
         </div>
       }
-      @if (meetings().length === 0) {
+      @if (todaysMeetings().length === 0) {
         <p class="empty-state">No meetings today</p>
       }
     </div>
@@ -249,6 +249,10 @@ export class DashboardComponent implements OnInit {
 
   stats = signal<DashboardStatsResponse | null>(null);
   meetings = signal<MeetingResponse[]>([]);
+  todaysMeetings = computed(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    return this.meetings().filter(m => m.scheduled_start?.slice(0, 10) === todayStr);
+  });
   attentionItems = signal<AttentionItem[]>([]);
   activityFeed = signal<ActivityFeedItem[]>([]);
   today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -260,22 +264,22 @@ export class DashboardComponent implements OnInit {
       next: (s) => this.stats.set(s),
       error: () => {},
     });
-    this.meetingService.list({ limit: 10 }).pipe(
+    this.meetingService.list({ limit: 50 }).pipe(
       takeUntilDestroyed(this.destroyRef),
     ).subscribe({
-      next: (res) => this.meetings.set(res.items),
+      next: (res) => this.meetings.set(res?.items ?? []),
       error: () => {},
     });
     this.dashboardService.getAttentionItems().pipe(
       takeUntilDestroyed(this.destroyRef),
     ).subscribe({
-      next: (res) => this.attentionItems.set(res.items),
+      next: (res) => this.attentionItems.set(res?.items ?? []),
       error: () => {},
     });
     this.dashboardService.getActivityFeed().pipe(
       takeUntilDestroyed(this.destroyRef),
     ).subscribe({
-      next: (res) => this.activityFeed.set(res.feed),
+      next: (res) => this.activityFeed.set(res?.feed ?? []),
       error: () => {},
     });
   }

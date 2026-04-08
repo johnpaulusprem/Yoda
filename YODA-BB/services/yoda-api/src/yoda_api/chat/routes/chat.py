@@ -106,14 +106,15 @@ async def send_message(
 
     from yoda_api.chat.services.chat_service import ChatService
 
-    # Get AI connector from app state if available, otherwise None
+    # Get AI Foundry connector for direct LLM completions
     ai_connector = None
     try:
-        from yoda_api.dependencies import get_llm_adapter
+        from yoda_api.dependencies import get_ai_foundry_connector
 
-        ai_connector = get_llm_adapter()
-    except Exception:
-        pass
+        ai_connector = await get_ai_foundry_connector()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("Failed to get AI connector: %s", exc, exc_info=True)
 
     service = ChatService(
         ai_connector=ai_connector,

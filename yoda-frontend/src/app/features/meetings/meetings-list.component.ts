@@ -15,7 +15,6 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { switchMap } from 'rxjs/operators';
-import { of } from 'rxjs';
 import { MeetingService } from '../../core/services/meeting.service';
 import { MeetingResponse } from '../../core/models';
 import { formatTime, computeDuration } from '../../shared/utils/format.utils';
@@ -40,96 +39,27 @@ interface MeetingGroup {
           <h1>Meetings</h1>
           <p>This week: {{ weekMeetingCount() }} meetings &bull; {{ weekTotalHours() }} hours</p>
         </div>
-        <button class="btn-create" (click)="showCreateModal.set(true)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Create Meeting
-        </button>
-      </div>
-    </div>
-
-    <!-- Create Meeting Modal -->
-    @if (showCreateModal()) {
-      <div class="modal-backdrop" (click)="closeModal()">
-        <div class="modal-content card" (click)="$event.stopPropagation()">
-          <div class="modal-header">
-            <h2>Create Meeting</h2>
-            <button class="modal-close" (click)="closeModal()">&times;</button>
-          </div>
-          <form (ngSubmit)="createMeeting()" class="modal-body">
-            <div class="form-group">
-              <label for="join_url">Teams Join URL <span class="required">*</span></label>
-              <input
-                id="join_url"
-                type="url"
-                placeholder="https://teams.microsoft.com/l/meetup-join/..."
-                [(ngModel)]="createForm.join_url"
-                name="join_url"
-                required
-                class="form-input" />
-            </div>
-            <div class="form-group">
-              <label for="subject">Subject</label>
-              <input
-                id="subject"
-                type="text"
-                placeholder="Meeting subject"
-                [(ngModel)]="createForm.subject"
-                name="subject"
-                class="form-input" />
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="organizer_name">Organizer Name</label>
-                <input
-                  id="organizer_name"
-                  type="text"
-                  placeholder="Your name"
-                  [(ngModel)]="createForm.organizer_name"
-                  name="organizer_name"
-                  class="form-input" />
-              </div>
-              <div class="form-group">
-                <label for="organizer_email">Organizer Email</label>
-                <input
-                  id="organizer_email"
-                  type="email"
-                  placeholder="you@example.com"
-                  [(ngModel)]="createForm.organizer_email"
-                  name="organizer_email"
-                  class="form-input" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  [(ngModel)]="createForm.sendBot"
-                  name="sendBot"
-                  class="form-checkbox" />
-                <span class="checkbox-custom"></span>
-                Send Bot to join the meeting
-              </label>
-              <p class="form-hint">The bot will join automatically and start transcribing.</p>
-            </div>
-
-            @if (createError()) {
-              <div class="form-error">{{ createError() }}</div>
+        <form class="join-bar" (ngSubmit)="joinMeeting()">
+          <input
+            type="url"
+            placeholder="Paste Teams meeting link..."
+            [(ngModel)]="joinUrl"
+            name="joinUrl"
+            class="join-input" />
+          <button type="submit" class="btn-join-now" [disabled]="creating() || !joinUrl">
+            @if (creating()) {
+              Joining...
+            } @else {
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Join Now
             }
-
-            <div class="modal-footer">
-              <button type="button" class="btn-cancel" (click)="closeModal()">Cancel</button>
-              <button type="submit" class="btn-submit" [disabled]="creating() || !createForm.join_url">
-                @if (creating()) {
-                  Creating...
-                } @else {
-                  Create Meeting
-                }
-              </button>
-            </div>
-          </form>
-        </div>
+          </button>
+        </form>
       </div>
-    }
+      @if (createError()) {
+        <div class="join-error">{{ createError() }}</div>
+      }
+    </div>
 
     <!-- Filter Tabs -->
     <div class="filter-tabs" role="tablist">
@@ -422,13 +352,38 @@ interface MeetingGroup {
       50% { opacity: 0.4; }
     }
 
-    /* Page header with create button */
+    /* Page header with join bar */
     .page-header-row {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
+      gap: 24px;
     }
-    .btn-create {
+    .join-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .join-input {
+      width: 320px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border-secondary);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    .join-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+    .join-input::placeholder {
+      color: var(--text-muted);
+    }
+    .btn-join-now {
       display: inline-flex;
       align-items: center;
       gap: 8px;
@@ -441,171 +396,24 @@ interface MeetingGroup {
       background: #3b82f6;
       color: white;
       transition: all 0.2s;
+      white-space: nowrap;
     }
-    .btn-create:hover {
+    .btn-join-now:hover:not(:disabled) {
       background: #2563eb;
       transform: translateY(-1px);
     }
-
-    /* Modal */
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.6);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      backdrop-filter: blur(4px);
+    .btn-join-now:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
-    .modal-content {
-      width: 520px;
-      max-width: 90vw;
-      max-height: 90vh;
-      overflow-y: auto;
-      padding: 0;
-    }
-    .modal-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 20px 24px;
-      border-bottom: 1px solid var(--border-secondary);
-    }
-    .modal-header h2 {
-      font-size: 18px;
-      font-weight: 600;
-      margin: 0;
-      color: var(--text-primary);
-    }
-    .modal-close {
-      background: none;
-      border: none;
-      font-size: 24px;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 0 4px;
-      line-height: 1;
-    }
-    .modal-close:hover {
-      color: var(--text-primary);
-    }
-    .modal-body {
-      padding: 24px;
-    }
-    .modal-footer {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      padding-top: 20px;
-      border-top: 1px solid var(--border-secondary);
-      margin-top: 8px;
-    }
-
-    /* Form elements */
-    .form-group {
-      margin-bottom: 18px;
-    }
-    .form-group label {
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      margin-bottom: 6px;
-    }
-    .required { color: #ef4444; }
-    .form-input {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--border-secondary);
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      font-size: 14px;
-      transition: border-color 0.2s;
-      box-sizing: border-box;
-    }
-    .form-input:focus {
-      outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-    }
-    .form-input::placeholder {
-      color: var(--text-muted);
-    }
-    .form-row {
-      display: flex;
-      gap: 16px;
-    }
-    .form-row .form-group {
-      flex: 1;
-    }
-    .form-hint {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin: 4px 0 0;
-    }
-
-    /* Checkbox */
-    .checkbox-label {
-      display: inline-flex !important;
-      align-items: center;
-      gap: 10px;
-      cursor: pointer;
-      font-weight: 500 !important;
-      color: var(--text-primary) !important;
-      font-size: 14px !important;
-    }
-    .form-checkbox {
-      width: 18px;
-      height: 18px;
-      accent-color: #3b82f6;
-      cursor: pointer;
-    }
-
-    /* Error */
-    .form-error {
+    .join-error {
       background: rgba(239, 68, 68, 0.1);
       border: 1px solid rgba(239, 68, 68, 0.3);
       color: #ef4444;
       padding: 10px 14px;
       border-radius: 8px;
       font-size: 13px;
-      margin-bottom: 12px;
-    }
-
-    /* Buttons */
-    .btn-cancel {
-      padding: 9px 18px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      border: 1px solid var(--border-secondary);
-      background: var(--bg-card);
-      color: var(--text-secondary);
-      transition: all 0.2s;
-    }
-    .btn-cancel:hover {
-      background: var(--bg-hover);
-    }
-    .btn-submit {
-      padding: 9px 20px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      border: none;
-      background: #3b82f6;
-      color: white;
-      transition: all 0.2s;
-    }
-    .btn-submit:hover:not(:disabled) {
-      background: #2563eb;
-    }
-    .btn-submit:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+      margin-top: 8px;
     }
   `],
 })
@@ -617,11 +425,10 @@ export class MeetingsListComponent implements OnInit {
   loading = signal(true);
   activeFilter = signal<FilterTab>('week');
 
-  // Create meeting modal state
-  showCreateModal = signal(false);
+  // Join bar state
+  joinUrl = '';
   creating = signal(false);
   createError = signal<string | null>(null);
-  createForm = { join_url: '', subject: '', organizer_name: '', organizer_email: '', sendBot: false };
 
   /** Meetings filtered by the active tab */
   filteredMeetings = computed(() => {
@@ -720,41 +527,26 @@ export class MeetingsListComponent implements OnInit {
     });
   }
 
-  closeModal(): void {
-    this.showCreateModal.set(false);
-    this.createError.set(null);
-    this.createForm = { join_url: '', subject: '', organizer_name: '', organizer_email: '', sendBot: false };
-  }
-
-  createMeeting(): void {
-    if (!this.createForm.join_url || this.creating()) return;
+  joinMeeting(): void {
+    if (!this.joinUrl || this.creating()) return;
 
     this.creating.set(true);
     this.createError.set(null);
 
-    const body: Record<string, string> = { join_url: this.createForm.join_url };
-    if (this.createForm.subject) body['subject'] = this.createForm.subject;
-    if (this.createForm.organizer_name) body['organizer_name'] = this.createForm.organizer_name;
-    if (this.createForm.organizer_email) body['organizer_email'] = this.createForm.organizer_email;
-
-    this.meetingService.create(body as any).pipe(
+    this.meetingService.create({ join_url: this.joinUrl } as any).pipe(
       switchMap(meeting => {
-        // Add the new meeting to the list immediately
         this.allMeetings.update(list => [meeting, ...list]);
-        if (this.createForm.sendBot) {
-          return this.meetingService.join(meeting.id);
-        }
-        return of(null);
+        return this.meetingService.join(meeting.id);
       }),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe({
       next: () => {
         this.creating.set(false);
-        this.closeModal();
+        this.joinUrl = '';
       },
       error: (err) => {
         this.creating.set(false);
-        this.createError.set(err?.error?.detail || err?.message || 'Failed to create meeting');
+        this.createError.set(err?.error?.detail || err?.message || 'Failed to join meeting');
       },
     });
   }

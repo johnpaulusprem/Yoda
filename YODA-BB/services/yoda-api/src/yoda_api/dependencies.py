@@ -248,6 +248,29 @@ def get_citation_tracker() -> Any:
     return CitationTracker()
 
 
+_ai_foundry_connector: Any = None
+
+
+async def get_ai_foundry_connector() -> Any:
+    """Return a connected AIFoundryConnector singleton for direct LLM calls."""
+    global _ai_foundry_connector
+    if _ai_foundry_connector is None:
+        from yoda_foundation.data_access.connectors.ai_foundry_connector import (
+            AIFoundryConnector,
+        )
+        from yoda_foundation.data_access.base.connector import ConnectorConfig
+
+        settings = get_settings()
+        connector_config = ConnectorConfig()
+        _ai_foundry_connector = AIFoundryConnector(
+            config=connector_config,
+            endpoint=settings.AI_FOUNDRY_ENDPOINT,
+            api_key=settings.AI_FOUNDRY_API_KEY,
+        )
+        await _ai_foundry_connector.connect(security_context=None)
+    return _ai_foundry_connector
+
+
 def get_llm_adapter() -> Any:
     """Return the singleton CachedLLMAdapter (or LLMAdapter) instance."""
     global _llm_adapter

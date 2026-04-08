@@ -69,7 +69,8 @@
           },
           "defaultConfiguration": "development",
           "options": {
-            "proxyConfig": "src/proxy.conf.json"
+            "proxyConfig": "src/proxy.conf.json",
+            "servePath": "/yoda/"
           }
         },
         "test": {
