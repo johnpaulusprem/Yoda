@@ -9,7 +9,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
-import { MeetingResponse, MeetingDetailResponse, MeetingListResponse } from '../models';
+import { MeetingResponse, MeetingDetailResponse, MeetingListResponse, CreateMeetingRequest } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class MeetingService {
@@ -17,6 +17,10 @@ export class MeetingService {
 
   list(params?: { status?: string; limit?: number; offset?: number }): Observable<MeetingListResponse> {
     return this.api.get<MeetingListResponse>('/api/meetings', params);
+  }
+
+  create(body: CreateMeetingRequest): Observable<MeetingResponse> {
+    return this.api.post<MeetingResponse>('/api/meetings', body);
   }
 
   get(id: string): Observable<MeetingDetailResponse> {

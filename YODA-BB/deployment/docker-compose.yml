@@ -6,7 +6,7 @@ services:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_USER: yoda
       POSTGRES_PASSWORD: yoda_dev
@@ -41,6 +41,7 @@ services:
       - ../../.env
     environment:
       PORT: "8001"
+      BROWSER_BOT_BASE_URL: "http://host.docker.internal:3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,7 +71,7 @@ services:
       context: ../services/browser-bot
       dockerfile: Dockerfile
     ports:
-      - "3001:3001"
+      - "3002:3001"
     env_file:
       - ../../.env
     environment:

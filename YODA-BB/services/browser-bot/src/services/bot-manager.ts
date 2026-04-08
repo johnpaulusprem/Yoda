@@ -77,9 +77,9 @@ export class BotManager {
       const useHeaded = !!process.env.DISPLAY || process.env.HEADED === "true";
       this.browser = await chromium.launch({
         headless: !useHeaded,
-        // Use installed Chrome instead of Playwright's bundled headless shell.
-        // Chrome's new headless mode supports audio rendering.
-        channel: "chrome",
+        // Use installed Chrome when available (supports audio rendering via new headless mode).
+        // On ARM64 (e.g. Apple Silicon Docker), Chrome isn't available — use bundled Chromium.
+        channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL || (process.arch === "arm64" ? undefined : "chrome"),
         ignoreDefaultArgs: ["--mute-audio"],
         args: [
           "--no-sandbox",
@@ -168,18 +168,10 @@ export class BotManager {
 
         if (participantCount === -1) {
           unknownCount++;
-          // After 3 consecutive unknowns (90s), treat as alone
-          if (unknownCount >= 3) {
-            if (!aloneStartedAt) {
-              aloneStartedAt = Date.now();
-              logger.info(`[${meetingId}] Participant count unknown for ${unknownCount} polls — treating as alone`);
-            } else if (Date.now() - aloneStartedAt >= ALONE_THRESHOLD_MS) {
-              logger.info(
-                `[${meetingId}] Bot has been alone (unknown) for ${ALONE_THRESHOLD_MS / 1000}s — auto-leaving`
-              );
-              clearInterval(interval);
-              onAlone();
-            }
+          // Log but do NOT treat as alone — only leave when we positively
+          // confirm no other participants are present.
+          if (unknownCount % 5 === 0) {
+            logger.info(`[${meetingId}] Participant count unknown for ${unknownCount} consecutive polls — staying in meeting`);
           }
           return;
         }

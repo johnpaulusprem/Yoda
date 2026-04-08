@@ -27,7 +27,7 @@ router = APIRouter()
 # overwrite terminal states.
 _VALID_TRANSITIONS: dict[str, set[str]] = {
     "scheduled": {"joining", "in_progress", "failed", "cancelled"},
-    "joining": {"in_progress", "error", "failed"},
+    "joining": {"in_progress", "completed", "error", "failed"},
     "in_progress": {"completed", "error"},
     "completed": {"processing_failed"},  # allow post-processing failure
     "failed": set(),  # terminal

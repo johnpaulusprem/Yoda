@@ -7,8 +7,10 @@ from __future__ import annotations
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Resolve the repo-root .env regardless of CWD
-_ENV_FILE = Path(__file__).resolve().parents[5] / ".env"
+# Resolve the repo-root .env regardless of CWD.
+# In Docker containers the path hierarchy is shorter, so guard against IndexError.
+_config_path = Path(__file__).resolve()
+_ENV_FILE = _config_path.parents[5] / ".env" if len(_config_path.parents) > 5 else None
 
 
 class Settings(BaseSettings):
@@ -101,4 +103,8 @@ class Settings(BaseSettings):
     DSPY_CACHE_ENABLED: bool = True
     DSPY_CACHE_TTL: int = 3600
 
-    model_config = SettingsConfigDict(env_file=str(_ENV_FILE), env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(_ENV_FILE) if _ENV_FILE else None,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )

@@ -91,7 +91,7 @@ async def create_meeting(
         thread_id=thread_id,
         join_url=body.join_url,
         subject=body.subject,
-        organizer_id="test-organizer",
+        organizer_id=_user.get("sub", "test-organizer"),
         organizer_name=body.organizer_name,
         organizer_email=body.organizer_email,
         scheduled_start=start,

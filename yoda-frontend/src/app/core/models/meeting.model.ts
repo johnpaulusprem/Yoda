@@ -72,4 +72,11 @@ export interface MeetingListResponse {
   total: number;
 }
 
+export interface CreateMeetingRequest {
+  join_url: string;
+  subject?: string;
+  organizer_name?: string;
+  organizer_email?: string;
+}
+
 import type { ActionItemResponse } from './action-item.model';

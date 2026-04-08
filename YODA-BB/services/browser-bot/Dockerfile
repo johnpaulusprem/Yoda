@@ -15,7 +15,7 @@ RUN npm run build
 RUN apt-get update && \
     apt-get install -y xvfb pulseaudio && \
     rm -rf /var/lib/apt/lists/* && \
-    npx playwright install --with-deps chrome
+    npx playwright install --with-deps chromium
 
 # Set display environment variable for Xvfb
 ENV DISPLAY=:99
