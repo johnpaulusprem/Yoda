@@ -24,7 +24,8 @@ from yoda_foundation.schemas.action_item import (
     ActionItemResponse,
     ActionItemUpdate,
 )
-from yoda_api.meetings.utils.azure_ad_auth import get_current_user
+from yoda_foundation.security.auth_dependency import get_current_user
+from yoda_foundation.security.context import SecurityContext
 
 logger = logging.getLogger(__name__)
 
@@ -99,14 +100,14 @@ async def list_action_items(
     limit: int = Query(default=50, ge=1, le=200, description="Page size"),
     offset: int = Query(default=0, ge=0, description="Page offset"),
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> ActionItemListResponse:
     """List action items with optional filtering by status, user, meeting, and priority.
 
     Results are scoped to action items assigned to the authenticated user
     or belonging to meetings the user organized.
     """
-    auth_user_id = _user.get("sub", "")
+    auth_user_id = _user.user_id
 
     # Validate filter values
     if status is not None and status not in VALID_STATUSES:
@@ -224,7 +225,7 @@ async def update_action_item(
     item_id: uuid.UUID,
     update: ActionItemUpdate,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> ActionItemResponse:
     """Update an action item's status, priority, deadline, or assignee.
 
@@ -287,7 +288,7 @@ async def update_action_item(
 async def complete_action_item(
     item_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> ActionItemResponse:
     """Mark an action item as completed.
 
@@ -333,7 +334,7 @@ async def snooze_action_item(
         description="Number of days to snooze nudges",
     ),
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> ActionItemResponse:
     """Snooze nudge reminders for an action item for N days.
 

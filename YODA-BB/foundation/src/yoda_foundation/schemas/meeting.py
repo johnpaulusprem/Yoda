@@ -234,7 +234,7 @@ class CreateMeetingRequest(BaseModel):
     """
 
     join_url: str
-    subject: str = "Test meeting"
+    subject: str = ""
     organizer_name: str = "Test Organizer"
     organizer_email: str = "test@example.com"
 

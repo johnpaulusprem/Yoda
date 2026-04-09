@@ -13,6 +13,8 @@ import { Component, inject, signal, OnInit, DestroyRef, ChangeDetectionStrategy 
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { MsalService } from '@azure/msal-angular';
+import { environment } from '../../../environments/environment';
 import { NotificationService } from '../../core/services/notification.service';
 import { SearchService } from '../../core/services/search.service';
 import { UserService } from '../../core/services/user.service';
@@ -106,7 +108,22 @@ import { formatRelative } from '../../shared/utils/format.utils';
         </div>
 
         <!-- Avatar -->
-        <div class="avatar" [title]="userService.profile().displayName">{{ userService.profile().initials }}</div>
+        <div class="avatar-wrapper">
+          <div class="avatar" (click)="toggleProfileMenu()" [title]="userService.profile().displayName">{{ userService.profile().initials }}</div>
+          @if (showProfileMenu()) {
+            <div class="profile-dropdown">
+              <div class="profile-info">
+                <div class="profile-name">{{ userService.profile().displayName }}</div>
+                <div class="profile-email">{{ userService.profile().email }}</div>
+              </div>
+              <div class="profile-divider"></div>
+              <button class="profile-action" (click)="logout()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Sign out
+              </button>
+            </div>
+          }
+        </div>
       </div>
     </header>
   `,
@@ -187,12 +204,30 @@ import { formatRelative } from '../../shared/utils/format.utils';
     .notif-time { font-size: 11px; color: var(--text-muted); }
     .notif-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
 
+    .avatar-wrapper { position: relative; }
     .avatar {
       width: 36px; height: 36px;
       background: linear-gradient(135deg, #3b82f6, #8b5cf6);
       border-radius: 50%; display: flex; align-items: center; justify-content: center;
       color: white; font-weight: 600; font-size: 14px; cursor: pointer;
     }
+    .profile-dropdown {
+      position: absolute; top: 44px; right: 0; width: 260px;
+      background: var(--bg-secondary); border: 1px solid var(--border-secondary);
+      border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      z-index: 200; overflow: hidden;
+    }
+    .profile-info { padding: 16px; }
+    .profile-name { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+    .profile-email { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .profile-divider { height: 1px; background: var(--border-secondary); }
+    .profile-action {
+      display: flex; align-items: center; gap: 10px; width: 100%;
+      padding: 12px 16px; background: none; border: none;
+      color: var(--text-secondary); font-size: 14px; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .profile-action:hover { background: var(--bg-hover); color: #ef4444; }
   `],
 })
 export class TopbarComponent implements OnInit {
@@ -200,8 +235,10 @@ export class TopbarComponent implements OnInit {
   private notificationService = inject(NotificationService);
   private searchService = inject(SearchService);
   private destroyRef = inject(DestroyRef);
+  private msalService = environment.requireAuth ? inject(MsalService) : null;
   userService = inject(UserService);
 
+  showProfileMenu = signal(false);
   searchQuery = '';
   searchFocused = signal(false);
   searchResults = signal<SearchResult[]>([]);
@@ -301,6 +338,15 @@ export class TopbarComponent implements OnInit {
         this.unreadCount.set(0);
       },
     });
+  }
+
+  toggleProfileMenu() {
+    this.showProfileMenu.update(v => !v);
+  }
+
+  logout() {
+    this.showProfileMenu.set(false);
+    this.msalService?.logoutRedirect();
   }
 
   formatRelative = formatRelative;

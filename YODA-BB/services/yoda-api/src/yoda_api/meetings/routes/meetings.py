@@ -32,7 +32,8 @@ from yoda_foundation.schemas.meeting import (
 from yoda_foundation.schemas.summary import SummaryResponse, SummaryUpdateRequest
 from yoda_foundation.schemas.transcript import TranscriptResponse
 from yoda_api.meetings.services.meeting_tag_service import compute_tags
-from yoda_api.meetings.utils.azure_ad_auth import get_current_user
+from yoda_foundation.security.auth_dependency import get_current_user
+from yoda_foundation.security.context import SecurityContext
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ async def check_browser_bot() -> dict:
 async def create_meeting(
     body: CreateMeetingRequest,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> MeetingResponse:
     """Create a meeting for testing bot join + transcription.
 
@@ -85,15 +86,19 @@ async def create_meeting(
     # Use a stable fake ID for teams_meeting_id so we can look up by join_url if needed
     teams_meeting_id = f"test-{meeting_id.hex[:12]}"
 
+    user_name = _user.metadata.get("name", "")
+    user_email = _user.metadata.get("email", "")
+    subject = body.subject or f"{user_name or 'Ad-hoc'}'s Meeting"
+
     meeting = Meeting(
         id=meeting_id,
         teams_meeting_id=teams_meeting_id,
         thread_id=thread_id,
         join_url=body.join_url,
-        subject=body.subject,
-        organizer_id=_user.get("sub", "test-organizer"),
-        organizer_name=body.organizer_name,
-        organizer_email=body.organizer_email,
+        subject=subject,
+        organizer_id=_user.user_id,
+        organizer_name=body.organizer_name or user_name,
+        organizer_email=body.organizer_email or user_email,
         scheduled_start=start,
         scheduled_end=end,
         status="scheduled",
@@ -117,7 +122,7 @@ async def list_meetings(
     limit: int = Query(20, ge=1, le=100, description="Max number of results"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> MeetingListResponse:
     """List meetings with optional status filter and limit/offset pagination.
 
@@ -125,7 +130,7 @@ async def list_meetings(
     (most recent first).  Results are scoped to meetings the authenticated
     user organized or participates in.
     """
-    user_id = _user.get("sub", "")
+    user_id = _user.user_id
 
     # Build the base query
     base_query = select(Meeting)
@@ -210,7 +215,7 @@ async def list_meetings(
 async def get_meeting(
     meeting_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> MeetingDetailResponse:
     """Get full meeting details including summary, action items, and participants."""
     query = (
@@ -235,7 +240,7 @@ async def get_meeting(
 async def get_transcript(
     meeting_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> TranscriptResponse:
     """Get all transcript segments for a meeting, ordered by sequence number."""
     # First, verify the meeting exists
@@ -286,7 +291,7 @@ async def join_meeting(
     meeting_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> dict:
     """Trigger the Browser Bot to join a Teams meeting.
 
@@ -367,7 +372,7 @@ async def leave_meeting(
     meeting_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> dict:
     """Remove the bot from an active Teams meeting.
 
@@ -432,7 +437,7 @@ async def leave_meeting(
 async def reprocess_meeting(
     meeting_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> dict:
     """Re-run AI processing on an existing transcript.
 
@@ -611,7 +616,7 @@ async def edit_summary(
     meeting_id: UUID,
     body: SummaryUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    _user: SecurityContext = Depends(get_current_user),
 ) -> SummaryResponse:
     """Partially update a meeting's AI-generated summary.
 

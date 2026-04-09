@@ -218,13 +218,21 @@ async def test_client(
 
         test_app.dependency_overrides[get_db] = override_get_db
 
-        # Override auth to return a user dict with sub matching test data
-        from meeting_service.utils.azure_ad_auth import get_current_user as meeting_get_current_user
+        # Override auth to return a SecurityContext matching test data
+        from yoda_foundation.security.auth_dependency import get_current_user as foundation_get_current_user
+        from yoda_foundation.security.context import ContextType, Permission, SecurityContext
 
         async def override_get_current_user():
-            return {"sub": "aad-user-001", "name": "Alice Johnson", "roles": ["Admin"]}
+            return SecurityContext(
+                user_id="aad-user-001",
+                tenant_id="test-tenant",
+                context_type=ContextType.USER,
+                permissions=frozenset(Permission.from_string(p) for p in ["meetings.*", "documents.*", "admin.*"]),
+                roles=frozenset({"CXO.Admin"}),
+                metadata={"name": "Alice Johnson", "email": "alice@test.com"},
+            )
 
-        test_app.dependency_overrides[meeting_get_current_user] = override_get_current_user
+        test_app.dependency_overrides[foundation_get_current_user] = override_get_current_user
 
         transport = ASGITransport(app=test_app)
         async with AsyncClient(

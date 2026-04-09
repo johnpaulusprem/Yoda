@@ -9,6 +9,7 @@ import { Component, ChangeDetectionStrategy, OnInit, inject } from '@angular/cor
 import { RouterOutlet } from '@angular/router';
 import { MsalService } from '@azure/msal-angular';
 import { environment } from '../environments/environment';
+import { UserService } from './core/services/user.service';
 
 @Component({
   selector: 'app-root',
@@ -19,6 +20,7 @@ import { environment } from '../environments/environment';
 })
 export class App implements OnInit {
   private msalService = environment.requireAuth ? inject(MsalService) : null;
+  private userService = inject(UserService);
 
   ngOnInit(): void {
     if (!this.msalService) return;
@@ -28,6 +30,7 @@ export class App implements OnInit {
       const accounts = this.msalService!.instance.getAllAccounts();
       if (accounts.length > 0) {
         this.msalService!.instance.setActiveAccount(accounts[0]);
+        this.userService.setFromMsal(accounts[0]);
       }
     });
   }

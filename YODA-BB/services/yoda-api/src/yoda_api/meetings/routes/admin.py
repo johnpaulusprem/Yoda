@@ -16,7 +16,8 @@ from yoda_api.meetings.schemas.admin import (
     UserListResponse,
     UserResponse,
 )
-from yoda_api.meetings.utils.azure_ad_auth import require_admin
+from yoda_foundation.security.auth_dependency import get_current_user
+from yoda_foundation.security.context import SecurityContext
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -42,7 +43,7 @@ async def list_users(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    _admin: dict = Depends(require_admin),
+    _admin: SecurityContext = Depends(get_current_user),
 ) -> UserListResponse:
     query = select(UserPreference)
     count_q = select(func.count()).select_from(UserPreference)
@@ -61,7 +62,7 @@ async def list_users(
 async def create_user(
     body: CreateUserRequest,
     db: AsyncSession = Depends(get_db),
-    _admin: dict = Depends(require_admin),
+    _admin: SecurityContext = Depends(get_current_user),
 ) -> UserResponse:
     user = UserPreference(
         user_id=body.user_id,
@@ -87,7 +88,7 @@ async def update_user(
     user_id: str,
     body: UpdateUserRequest,
     db: AsyncSession = Depends(get_db),
-    _admin: dict = Depends(require_admin),
+    _admin: SecurityContext = Depends(get_current_user),
 ) -> UserResponse:
     result = await db.execute(
         select(UserPreference).where(UserPreference.user_id == user_id)
@@ -108,7 +109,7 @@ async def update_user(
 async def delete_user(
     user_id: str,
     db: AsyncSession = Depends(get_db),
-    _admin: dict = Depends(require_admin),
+    _admin: SecurityContext = Depends(get_current_user),
 ) -> None:
     result = await db.execute(
         select(UserPreference).where(UserPreference.user_id == user_id)
