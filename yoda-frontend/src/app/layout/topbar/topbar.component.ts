@@ -14,7 +14,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MsalService } from '@azure/msal-angular';
-import { environment } from '../../../environments/environment';
+import { isAuthRequired } from '../../../environments/environment';
 import { NotificationService } from '../../core/services/notification.service';
 import { SearchService } from '../../core/services/search.service';
 import { UserService } from '../../core/services/user.service';
@@ -235,7 +235,7 @@ export class TopbarComponent implements OnInit {
   private notificationService = inject(NotificationService);
   private searchService = inject(SearchService);
   private destroyRef = inject(DestroyRef);
-  private msalService = environment.requireAuth ? inject(MsalService) : null;
+  private msalService = inject(MsalService, { optional: true });
   userService = inject(UserService);
 
   showProfileMenu = signal(false);
@@ -346,7 +346,9 @@ export class TopbarComponent implements OnInit {
 
   logout() {
     this.showProfileMenu.set(false);
-    this.msalService?.logoutRedirect();
+    if (isAuthRequired()) {
+      this.msalService?.logoutRedirect();
+    }
   }
 
   formatRelative = formatRelative;

@@ -11,14 +11,14 @@
  */
 import { Routes } from '@angular/router';
 import { MsalGuard } from '@azure/msal-angular';
-import { environment } from '../environments/environment';
+import { isAuthRequired } from '../environments/environment';
 import { ShellComponent } from './layout/shell/shell.component';
 
 export const routes: Routes = [
   {
     path: '',
     component: ShellComponent,
-    canActivate: environment.requireAuth ? [MsalGuard] : [],
+    canActivate: isAuthRequired() ? [MsalGuard] : [],
     children: [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
       {

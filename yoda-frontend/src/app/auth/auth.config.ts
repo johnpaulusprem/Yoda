@@ -7,7 +7,7 @@
  * - createMsalInterceptorConfig: auto-attaches Bearer tokens to /api/* requests.
  *
  * All values come from environment.azure.*. Auth is conditionally enabled
- * via environment.requireAuth in app.config.ts.
+ * via isAuthRequired() in app.config.ts.
  */
 import { MsalGuardConfiguration, MsalInterceptorConfiguration } from '@azure/msal-angular';
 import { BrowserCacheLocation, InteractionType, PublicClientApplication } from '@azure/msal-browser';

@@ -8,7 +8,7 @@
 import { Component, ChangeDetectionStrategy, OnInit, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { MsalService } from '@azure/msal-angular';
-import { environment } from '../environments/environment';
+import { isAuthRequired } from '../environments/environment';
 import { UserService } from './core/services/user.service';
 
 @Component({
@@ -19,11 +19,11 @@ import { UserService } from './core/services/user.service';
   template: `<router-outlet />`,
 })
 export class App implements OnInit {
-  private msalService = environment.requireAuth ? inject(MsalService) : null;
+  private msalService = inject(MsalService, { optional: true });
   private userService = inject(UserService);
 
   ngOnInit(): void {
-    if (!this.msalService) return;
+    if (!isAuthRequired() || !this.msalService) return;
     this.msalService.instance.initialize().then(() => {
       return this.msalService!.instance.handleRedirectPromise();
     }).then(() => {

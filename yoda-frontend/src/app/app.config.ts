@@ -2,7 +2,7 @@
  * Angular application configuration -- providers for routing, HTTP, and MSAL auth.
  *
  * MSAL providers (MsalService, MsalGuard, MsalInterceptor, MsalBroadcastService)
- * are conditionally included based on environment.requireAuth. When disabled
+ * are conditionally included based on isAuthRequired() (see environments). When disabled
  * (local dev), the app runs without Azure AD authentication.
  *
  * Key providers: provideRouter, provideHttpClient (with DI-based interceptors),
@@ -21,7 +21,7 @@ import {
   MsalInterceptor,
   MsalService,
 } from '@azure/msal-angular';
-import { environment } from '../environments/environment';
+import { isAuthRequired } from '../environments/environment';
 import { createMsalInstance, createMsalGuardConfig, createMsalInterceptorConfig } from './auth/auth.config';
 
 import { routes } from './app.routes';
@@ -41,6 +41,6 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
     provideHttpClient(withInterceptorsFromDi()),
-    ...(environment.requireAuth ? msalProviders : []),
+    ...(isAuthRequired() ? msalProviders : []),
   ],
 };
